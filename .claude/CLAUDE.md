@@ -29,7 +29,7 @@ tests/
 ## Skills
 
 Before working on this package, read the zodal UI renderer skill:
-- `/Users/thorwhalen/Dropbox/py/proj/i/zodal/.claude/skills/zodal-ui-renderer/SKILL.md`
+- https://github.com/i2mint/zodal/tree/main/.claude/skills/zodal-ui-renderer
 
 ## Dependencies
 
