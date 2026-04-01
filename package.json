@@ -16,7 +16,9 @@
   "publishConfig": {
     "access": "public"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
@@ -43,5 +45,13 @@
     "type": "git",
     "url": "https://github.com/i2mint/zodal-ui-shadcn.git"
   },
-  "keywords": ["zodal", "renderer", "shadcn", "ui", "react", "components"]
+  "keywords": [
+    "zodal",
+    "renderer",
+    "shadcn",
+    "ui",
+    "react",
+    "components"
+  ],
+  "packageManager": "pnpm@9.15.0"
 }
