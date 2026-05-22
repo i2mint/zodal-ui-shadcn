@@ -3,3 +3,5 @@ dist/
 *.tsbuildinfo
 .DS_Store
 .turbo/
+# This is a pnpm project — reject npm's lockfile
+package-lock.json
