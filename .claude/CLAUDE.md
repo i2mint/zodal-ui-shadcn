@@ -15,6 +15,7 @@ src/
     cell-renderers.ts  — Table cell renderers (text, number, boolean, date, badge, array, currency)
     form-renderers.ts  — Form field renderers (text, number, checkbox, select, date)
     filter-renderers.ts — Filter widget renderers (text, select, range, boolean)
+    content-renderers.ts — ContentRef cell (link / image thumbnail) and file-upload form field
 tests/
   registry.test.ts     — Registry resolution tests
 ```
@@ -33,7 +34,7 @@ Before working on this package, read the zodal UI renderer skill:
 
 ## Dependencies
 
-- `@zodal/core` and `@zodal/ui` as peer dependencies
+- `@zodal/core` and `@zodal/ui` as peer dependencies, caret on the lowest version needed (`^0.2.1`; see zodal's `docs/versioning.md`)
 - `react` and `react-dom` as peer dependencies
 - Build: tsup (dual CJS/ESM + .d.ts)
 - Test: vitest with jsdom environment
