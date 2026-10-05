@@ -22,6 +22,7 @@ src/
     options-form-renderers.ts — Options-form widgets keyed on editWidget: fieldset, password, code
     filter-renderers.ts — Filter widget renderers (text, select, range, boolean)
     view-renderers.ts  — Collection view: CollectionView, ListItem, GridCard
+    content-renderers.ts — ContentRef cell (link / image thumbnail) and file-upload form field
 tests/
   registry.test.ts     — Registry resolution tests
   browser/             — `pnpm test:browser`: layout checks in headless Chromium (playwright-core), not in CI
@@ -41,7 +42,7 @@ Before working on this package, read the zodal UI renderer skill:
 
 ## Dependencies
 
-- `@zodal/core` and `@zodal/ui` as peer dependencies
+- `@zodal/core` and `@zodal/ui` as peer dependencies, caret on the lowest version needed (`^0.2.6`; see zodal's `docs/versioning.md`)
 - `react` and `react-dom` as peer dependencies
 - Build: tsup (dual CJS/ESM + .d.ts)
 - Test: vitest with jsdom environment

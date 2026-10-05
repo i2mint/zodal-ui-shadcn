@@ -6,14 +6,10 @@
  */
 
 import React from 'react';
+import { isContentRef } from '@zodal/core';
 import { PRIORITY } from '@zodal/ui';
 import type { RendererEntry } from '@zodal/ui';
 import type { CellProps, FormFieldProps } from '../types.js';
-
-/** Check if a value is a ContentRef (matches @zodal/core isContentRef). */
-function isContentRef(value: unknown): value is { _tag: 'ContentRef'; field: string; itemId: string; url?: string; mimeType?: string; size?: number } {
-  return typeof value === 'object' && value !== null && '_tag' in value && (value as any)._tag === 'ContentRef';
-}
 
 // ============================================================================
 // Cell Renderer: Content download/preview
