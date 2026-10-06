@@ -6,6 +6,7 @@ import React from 'react';
 import { PRIORITY } from '@zodal/ui';
 import type { RendererEntry } from '@zodal/ui';
 import type { FilterFieldProps } from '../types.js';
+import { ChipFilter } from './tag-renderers.js';
 
 function TextFilter({ field, config }: FilterFieldProps) {
   return React.createElement('input', {
@@ -100,5 +101,13 @@ export const filterRenderers: RendererEntry<React.ComponentType<FilterFieldProps
     tester: (field, ctx) => ctx.mode === 'filter' && field.zodType === 'boolean' ? PRIORITY.DEFAULT : -1,
     renderer: BooleanFilter,
     name: 'BooleanFilter',
+  },
+  // `contains` on an array is element membership; on a string it is a substring
+  // match, which stays with the text filter.
+  {
+    tester: (field, ctx) =>
+      ctx.mode === 'filter' && (field as any).filterable === 'contains' && field.zodType === 'array' ? PRIORITY.DEFAULT : -1,
+    renderer: ChipFilter,
+    name: 'ChipFilter',
   },
 ];

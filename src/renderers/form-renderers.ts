@@ -8,6 +8,7 @@ import React from 'react';
 import { PRIORITY } from '@zodal/ui';
 import type { RendererEntry } from '@zodal/ui';
 import type { FormFieldProps } from '../types.js';
+import { TagInput } from './tag-renderers.js';
 
 function TextInput({ field, config }: FormFieldProps) {
   return React.createElement('div', null,
@@ -126,5 +127,17 @@ export const formRenderers: RendererEntry<React.ComponentType<FormFieldProps>>[]
     tester: (field, ctx) => ctx.mode === 'form' && field.zodType === 'date' ? PRIORITY.DEFAULT : -1,
     renderer: DateInput,
     name: 'DateInput',
+  },
+  // Array fields ('tags' form fields), unless another widget is declared; an
+  // explicit `editWidget: 'tags'` asks for this widget on any field.
+  {
+    tester: (field, ctx) => {
+      if (ctx.mode !== 'form') return -1;
+      const widget = (field as any).editWidget;
+      if (widget === 'tags') return PRIORITY.OVERRIDE;
+      return field.zodType === 'array' && !widget ? PRIORITY.DEFAULT : -1;
+    },
+    renderer: TagInput,
+    name: 'TagInput',
   },
 ];

@@ -9,6 +9,7 @@ import React from 'react';
 import { PRIORITY } from '@zodal/ui';
 import type { RendererEntry } from '@zodal/ui';
 import type { CellProps } from '../types.js';
+import { ChipCell } from './tag-renderers.js';
 
 // --- Text Cell (fallback and string default) ---
 function TextCell({ value, config }: CellProps) {
@@ -51,12 +52,6 @@ function BadgeCell({ value, config }: CellProps) {
   }, str);
 }
 
-// --- Array Cell ---
-function ArrayCell({ value }: CellProps) {
-  if (!Array.isArray(value)) return React.createElement('span', null, '\u2014');
-  return React.createElement('span', null, value.join(', '));
-}
-
 export const cellRenderers: RendererEntry<React.ComponentType<CellProps>>[] = [
   // Fallback: anything renders as text
   {
@@ -97,7 +92,8 @@ export const cellRenderers: RendererEntry<React.ComponentType<CellProps>>[] = [
   // Array
   {
     tester: (field, ctx) => ctx.mode === 'cell' && field.zodType === 'array' ? PRIORITY.DEFAULT : -1,
-    renderer: ArrayCell,
+    // Chips with "+N" overflow (see tag-renderers.ts); the name is kept for lookups.
+    renderer: ChipCell,
     name: 'ArrayCell',
   },
   // Currency (specialized number)
