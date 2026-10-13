@@ -65,11 +65,15 @@ function BooleanFilter({ field, config }: FilterFieldProps) {
 }
 
 /**
- * Field types a free-text filter value can express. Structured types (object, record, map,
- * set, tuple, union, ...) and bigint get no fallback filter: `resolve` returns null for them.
- * Arrays are included because their default filter, `contains`, tests membership of one value.
+ * Field types a free-text filter value can express. Other types (object, record, map, union,
+ * bigint, ...) get no fallback filter: unless a specific filter renderer matches them (e.g.
+ * `RangeFilter` for a bigint inferred as `range`), `resolve` returns null.
+ * Collections (array, set, tuple) are included because their inferred filter, `contains`,
+ * tests membership of one value.
  */
-const TEXT_FILTERABLE_TYPES = new Set(['string', 'number', 'int', 'float', 'date', 'enum', 'literal', 'boolean', 'array']);
+const TEXT_FILTERABLE_TYPES = new Set([
+  'string', 'number', 'int', 'float', 'date', 'enum', 'literal', 'boolean', 'array', 'set', 'tuple',
+]);
 
 export const filterRenderers: RendererEntry<React.ComponentType<FilterFieldProps>>[] = [
   // Fallback: text filter, for the types a text value can express

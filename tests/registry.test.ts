@@ -116,10 +116,14 @@ describe('which renderer wins, per mode (pinned)', () => {
     ['filter', { zodType: 'enum', filterable: 'select' }, 'SelectFilter'],
     ['filter', { zodType: 'number', filterable: 'range' }, 'RangeFilter'],
     ['filter', { zodType: 'boolean', filterable: 'boolean' }, 'BooleanFilter'],
+    // filterable values as inference produces them (zodal core inference.ts)
     ['filter', { zodType: 'array', filterable: 'contains' }, 'TextFilter (fallback)'],
-    ['filter', { zodType: 'object', filterable: true }, null],
-    ['filter', { zodType: 'set', filterable: true }, null],
-    ['filter', { zodType: 'bigint', filterable: true }, null],
+    ['filter', { zodType: 'set', filterable: 'contains' }, 'TextFilter (fallback)'],
+    ['filter', { zodType: 'tuple', filterable: 'contains' }, 'TextFilter (fallback)'],
+    ['filter', { zodType: 'bigint', filterable: 'range' }, 'RangeFilter'],
+    ['filter', { zodType: 'bigint', filterable: 'exact' }, null],
+    ['filter', { zodType: 'object', filterable: 'exact' }, null],
+    ['filter', { zodType: 'record', filterable: 'exact' }, null],
   ] as const)('%s %o -> %s', (mode, overrides, expected) => {
     expect(winner(overrides as any, mode)).toBe(expected);
   });
@@ -150,6 +154,10 @@ describe('ReadOnlyInput (form fallback)', () => {
     const html = render({ a: 1, n: 2n });
     expect(html).toContain('readOnly');
     expect(html).toContain('value="{&quot;a&quot;:1,&quot;n&quot;:&quot;2&quot;}"');
+  });
+
+  it('shows sets and maps nested in an object by their contents', () => {
+    expect(render({ s: new Set([1]), m: new Map([['k', 2]]) })).toContain('value="{&quot;s&quot;:[1],&quot;m&quot;:{&quot;k&quot;:2}}"');
   });
 
   it('shows sets and maps by their contents, and nothing for a missing value', () => {

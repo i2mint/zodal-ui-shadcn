@@ -57,12 +57,12 @@ console.table(scores);
 
 | Renderer | Filter Type | Description |
 |----------|-------------|-------------|
-| `TextFilter` | `search`; fallback for other filter types on scalar, enum, date and array fields | Text search input |
+| `TextFilter` | `search`; fallback for other filter types on scalar, enum, date and collection (array, set, tuple) fields | Text search input |
 | `SelectFilter` | `select`, `multiSelect` | Dropdown filter |
 | `RangeFilter` | `range` | Min/max numeric range |
 | `BooleanFilter` | `boolean` | Yes/No/All dropdown |
 
-Each fallback matches only its own mode, so a form or a filter never resolves to a table cell. Structured types (object, record, map, set, tuple, union) and `bigint` have no filter: `registry.resolve(field, { mode: 'filter' })` returns `null` for them.
+Each fallback matches only its own mode, so a form or a filter never resolves to a table cell. Other types (object, record, map, union, `bigint`, ...) have no fallback filter: unless a specific filter matches (a `bigint` inferred as `range` gets `RangeFilter`), `registry.resolve(field, { mode: 'filter' })` returns `null`.
 
 ## Customization
 

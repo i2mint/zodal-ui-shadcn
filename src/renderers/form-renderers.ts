@@ -98,7 +98,12 @@ function displayValue(value: unknown): string {
   if (value instanceof Map) return displayValue(Object.fromEntries(value));
   if (typeof value !== 'object') return String(value);
   try {
-    return JSON.stringify(value, (_, v) => (typeof v === 'bigint' ? String(v) : v));
+    return JSON.stringify(value, (_, v) => {
+      if (typeof v === 'bigint') return String(v);
+      if (v instanceof Set) return [...v];
+      if (v instanceof Map) return Object.fromEntries(v);
+      return v;
+    });
   } catch {
     return String(value);
   }
