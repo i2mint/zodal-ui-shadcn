@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { createShadcnRegistry } from '../src/index.js';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { createShadcnRegistry, cellRenderers } from '../src/index.js';
 import type { ResolvedFieldAffordance } from '@zodal/core';
 
 function mockField(overrides: Partial<ResolvedFieldAffordance> = {}): ResolvedFieldAffordance {
@@ -73,5 +75,86 @@ describe('createShadcnRegistry', () => {
     const scores = registry.explain(field, { mode: 'cell' });
     const topScorer = scores[0];
     expect(topScorer.name).toContain('Currency');
+  });
+});
+
+describe('which renderer wins, per mode (pinned)', () => {
+  const registry = createShadcnRegistry();
+  const MODES = ['cell', 'form', 'filter'] as const;
+  type Mode = (typeof MODES)[number];
+
+  function winner(overrides: Partial<ResolvedFieldAffordance> & Record<string, unknown>, mode: Mode): string | null {
+    const field = mockField(overrides as Partial<ResolvedFieldAffordance>);
+    const resolved = registry.resolve(field, { mode });
+    if (resolved === null) return null;
+    const top = registry.explain(field, { mode })[0];
+    expect(top.renderer).toBe(resolved);
+    return top.name ?? null;
+  }
+
+  it.each([
+    ['cell', { zodType: 'string' }, 'TextCell'],
+    ['cell', { zodType: 'number' }, 'NumberCell'],
+    ['cell', { zodType: 'boolean' }, 'BooleanCell'],
+    ['cell', { zodType: 'date' }, 'DateCell'],
+    ['cell', { zodType: 'enum' }, 'BadgeCell'],
+    ['cell', { zodType: 'array' }, 'ArrayCell'],
+    ['cell', { zodType: 'object' }, 'TextCell (fallback)'],
+    ['cell', { zodType: 'set' }, 'TextCell (fallback)'],
+    ['cell', { zodType: 'bigint' }, 'TextCell (fallback)'],
+    ['form', { zodType: 'string' }, 'TextInput'],
+    ['form', { zodType: 'number' }, 'NumberInput'],
+    ['form', { zodType: 'boolean' }, 'CheckboxInput'],
+    ['form', { zodType: 'enum' }, 'SelectInput'],
+    ['form', { zodType: 'date' }, 'DateInput'],
+    ['form', { zodType: 'array' }, 'ReadOnlyInput (fallback)'],
+    ['form', { zodType: 'object' }, 'ReadOnlyInput (fallback)'],
+    ['form', { zodType: 'set' }, 'ReadOnlyInput (fallback)'],
+    ['form', { zodType: 'bigint' }, 'ReadOnlyInput (fallback)'],
+    ['filter', { zodType: 'string', filterable: 'search' }, 'TextFilter'],
+    ['filter', { zodType: 'string', filterable: 'exact' }, 'TextFilter (fallback)'],
+    ['filter', { zodType: 'enum', filterable: 'select' }, 'SelectFilter'],
+    ['filter', { zodType: 'number', filterable: 'range' }, 'RangeFilter'],
+    ['filter', { zodType: 'boolean', filterable: 'boolean' }, 'BooleanFilter'],
+    ['filter', { zodType: 'array', filterable: 'contains' }, 'TextFilter (fallback)'],
+    ['filter', { zodType: 'object', filterable: true }, null],
+    ['filter', { zodType: 'set', filterable: true }, null],
+    ['filter', { zodType: 'bigint', filterable: true }, null],
+  ] as const)('%s %o -> %s', (mode, overrides, expected) => {
+    expect(winner(overrides as any, mode)).toBe(expected);
+  });
+
+  it('never resolves a table cell in a form or a filter', () => {
+    const cellNames = new Set(cellRenderers.map(entry => entry.name));
+    const types = ['string', 'number', 'int', 'float', 'boolean', 'date', 'enum', 'array', 'object', 'set', 'map',
+      'record', 'tuple', 'union', 'bigint', 'literal', 'unknown_type'];
+    for (const zodType of types) {
+      for (const mode of ['form', 'filter'] as const) {
+        const name = winner({ zodType, filterable: true }, mode);
+        expect(cellNames.has(name ?? '')).toBe(false);
+      }
+    }
+  });
+});
+
+describe('ReadOnlyInput (form fallback)', () => {
+  const registry = createShadcnRegistry();
+  const config = { name: 'meta', label: 'Meta' } as any;
+
+  function render(value: unknown): string {
+    const Component = registry.resolve(mockField({ zodType: 'object' }), { mode: 'form' })!;
+    return renderToStaticMarkup(React.createElement(Component, { field: { value, onChange: () => {} }, config }));
+  }
+
+  it('shows structured values as JSON, read-only', () => {
+    const html = render({ a: 1, n: 2n });
+    expect(html).toContain('readOnly');
+    expect(html).toContain('value="{&quot;a&quot;:1,&quot;n&quot;:&quot;2&quot;}"');
+  });
+
+  it('shows sets and maps by their contents, and nothing for a missing value', () => {
+    expect(render(new Set(['x', 'y']))).toContain('value="[&quot;x&quot;,&quot;y&quot;]"');
+    expect(render(new Map([['k', 1]]))).toContain('value="{&quot;k&quot;:1}"');
+    expect(render(undefined)).toContain('value=""');
   });
 });

@@ -64,10 +64,17 @@ function BooleanFilter({ field, config }: FilterFieldProps) {
   );
 }
 
+/**
+ * Field types a free-text filter value can express. Structured types (object, record, map,
+ * set, tuple, union, ...) and bigint get no fallback filter: `resolve` returns null for them.
+ * Arrays are included because their default filter, `contains`, tests membership of one value.
+ */
+const TEXT_FILTERABLE_TYPES = new Set(['string', 'number', 'int', 'float', 'date', 'enum', 'literal', 'boolean', 'array']);
+
 export const filterRenderers: RendererEntry<React.ComponentType<FilterFieldProps>>[] = [
-  // Fallback: text filter
+  // Fallback: text filter, for the types a text value can express
   {
-    tester: (_, ctx) => ctx.mode === 'filter' ? PRIORITY.FALLBACK : -1,
+    tester: (field, ctx) => ctx.mode === 'filter' && TEXT_FILTERABLE_TYPES.has(field.zodType) ? PRIORITY.FALLBACK : -1,
     renderer: TextFilter,
     name: 'TextFilter (fallback)',
   },

@@ -58,9 +58,10 @@ function ArrayCell({ value }: CellProps) {
 }
 
 export const cellRenderers: RendererEntry<React.ComponentType<CellProps>>[] = [
-  // Fallback: anything renders as text
+  // Fallback: any cell renders as text. Cells only: an unmatched form field or filter must
+  // not resolve to a table cell (forms and filters have their own fallbacks).
   {
-    tester: () => PRIORITY.FALLBACK,
+    tester: (_, ctx) => ctx.mode === 'cell' ? PRIORITY.FALLBACK : -1,
     renderer: TextCell,
     name: 'TextCell (fallback)',
   },
