@@ -90,12 +90,48 @@ function DateInput({ field, config }: FormFieldProps) {
   );
 }
 
+/** A value as one line of text: JSON for structured values, so `{a: 1}` never shows as `[object Object]`. */
+function displayValue(value: unknown): string {
+  if (value == null) return '';
+  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Set) return displayValue([...value]);
+  if (value instanceof Map) return displayValue(Object.fromEntries(value));
+  if (typeof value !== 'object') return String(value);
+  try {
+    return JSON.stringify(value, (_, v) => {
+      if (typeof v === 'bigint') return String(v);
+      if (v instanceof Set) return [...v];
+      if (v instanceof Map) return Object.fromEntries(v);
+      return v;
+    });
+  } catch {
+    return String(value);
+  }
+}
+
+/**
+ * Fallback for a field type with no form renderer of its own (object, set, bigint, ...).
+ * Read-only: an editable text box would write a string into a field of another type.
+ */
+function ReadOnlyInput({ field, config }: FormFieldProps) {
+  return React.createElement('div', null,
+    React.createElement('label', { htmlFor: config.name }, config.label),
+    React.createElement('input', {
+      id: config.name,
+      type: 'text',
+      value: displayValue(field.value),
+      readOnly: true,
+    }),
+    config.helpText && React.createElement('p', { className: 'text-sm text-muted-foreground' }, config.helpText),
+  );
+}
+
 export const formRenderers: RendererEntry<React.ComponentType<FormFieldProps>>[] = [
-  // Fallback
+  // Fallback: shown, never edited, for any type without its own form renderer
   {
     tester: (_, ctx) => ctx.mode === 'form' ? PRIORITY.FALLBACK : -1,
-    renderer: TextInput,
-    name: 'TextInput (fallback)',
+    renderer: ReadOnlyInput,
+    name: 'ReadOnlyInput (fallback)',
   },
   // String
   {

@@ -34,7 +34,7 @@ console.table(scores);
 
 | Renderer | Zod Type | Description |
 |----------|----------|-------------|
-| `TextCell` | `string` (fallback) | Plain text, optional truncation |
+| `TextCell` | `string`, and any type without its own cell (fallback) | Plain text, optional truncation |
 | `NumberCell` | `number`, `int`, `float` | Formatted numbers |
 | `BooleanCell` | `boolean` | Checkmark / cross |
 | `DateCell` | `date` | Localized date string |
@@ -46,7 +46,8 @@ console.table(scores);
 
 | Renderer | Zod Type | Description |
 |----------|----------|-------------|
-| `TextInput` | `string` (fallback) | Text input with label + help text |
+| `TextInput` | `string` | Text input with label + help text |
+| `ReadOnlyInput` | any type without its own form renderer (fallback) | Read-only text showing the value (JSON for structured values), so a field of another type is never overwritten with a string |
 | `NumberInput` | `number`, `int`, `float` | Numeric input |
 | `CheckboxInput` | `boolean` | Checkbox with label |
 | `SelectInput` | `enum` | Dropdown select |
@@ -56,10 +57,12 @@ console.table(scores);
 
 | Renderer | Filter Type | Description |
 |----------|-------------|-------------|
-| `TextFilter` | `search` (fallback) | Text search input |
+| `TextFilter` | `search`; fallback for other filter types on scalar, enum, date and collection (array, set, tuple) fields | Text search input |
 | `SelectFilter` | `select`, `multiSelect` | Dropdown filter |
 | `RangeFilter` | `range` | Min/max numeric range |
 | `BooleanFilter` | `boolean` | Yes/No/All dropdown |
+
+Each fallback matches only its own mode, so a form or a filter never resolves to a table cell. Other types (object, record, map, union, `bigint`, ...) have no fallback filter: unless a specific filter matches (a `bigint` inferred as `range` gets `RangeFilter`), `registry.resolve(field, { mode: 'filter' })` returns `null`.
 
 ## Customization
 
