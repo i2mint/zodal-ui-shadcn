@@ -4,3 +4,8 @@ export { formRenderers } from './renderers/form-renderers.js';
 export { filterRenderers } from './renderers/filter-renderers.js';
 export { contentCellRenderers, contentFormRenderers } from './renderers/content-renderers.js';
 export type { CellProps, FormFieldProps, FilterFieldProps } from './types.js';
+export { CollectionView, ListItem, GridCard, itemId } from './renderers/view-renderers.js';
+export type { ItemViewProps, CollectionViewProps, ValueRenderer } from './renderers/view-renderers.js';
+export { groupItems, groupId } from './group-items.js';
+export type { ItemGroup, GroupItemsOptions } from './group-items.js';
+export type { ViewConfig, ViewFieldConfig, ViewGroupConfig, ViewOperationConfig } from './view-types.js';
