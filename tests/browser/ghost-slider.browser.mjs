@@ -1,7 +1,8 @@
 // Browser check for GhostSlider (jsdom cannot lay out a range input): in headless Chromium,
 // press the thumb, drag it, and check that the ghost's centre is the thumb's pre-drag centre
-// within 0.5px at min, middle and max; then release and check the ghost is gone and exactly
-// one commit fired; then check one commit per arrow-key press.
+// within 0.5px at min, middle and max, left-to-right and then right-to-left (where the browser
+// mirrors the input and the ghost must mirror with it); then release and check the ghost is gone
+// and exactly one commit fired; then check one commit per arrow-key press.
 //
 // Run: pnpm test:browser (needs a Chromium for playwright-core: `npx playwright-core install
 // chromium` once). Not part of `pnpm test`, so CI does not need a browser.
@@ -83,23 +84,26 @@ try {
     return { x: box.x + (span.min + span.max + 1) / 2, y: box.y + box.height / 2 };
   };
 
-  for (const start of [0, 30, 100]) {
+  for (const [dir, start] of ['ltr', 'rtl'].flatMap((d) => [0, 30, 100].map((s) => [d, s]))) {
+    await page.evaluate((d) => document.getElementById('root').setAttribute('dir', d), dir);
     await page.evaluate((v) => window.__set(v), start);
     const before = await thumbCentre();
-    const dx = start === 100 ? -60 : 60;
+    // Drag towards the middle: under RTL a higher value sits further left.
+    const dx = (start === 100 ? -60 : 60) * (dir === 'rtl' ? -1 : 1);
     await page.mouse.move(before.x, before.y);
     await page.mouse.down();
     await page.mouse.move(before.x + dx, before.y, { steps: 6 });
     const g = await ghost.boundingBox();
     const ghostCentre = g ? g.x + g.width / 2 : NaN;
     check(Math.abs(ghostCentre - before.x) <= TOLERANCE_PX,
-      `at ${start}: ghost centre ${ghostCentre.toFixed(2)} vs pre-drag thumb centre ${before.x.toFixed(2)}`);
+      `${dir} at ${start}: ghost centre ${ghostCentre.toFixed(2)} vs pre-drag thumb centre ${before.x.toFixed(2)}`);
     await page.mouse.up();
-    check((await ghost.count()) === 0, `at ${start}: the ghost is gone after release`);
+    check((await ghost.count()) === 0, `${dir} at ${start}: the ghost is gone after release`);
     const commits = await page.evaluate(() => window.__commits);
-    check(commits.length === 1, `at ${start}: one commit per drag (got ${JSON.stringify(commits)})`);
+    check(commits.length === 1, `${dir} at ${start}: one commit per drag (got ${JSON.stringify(commits)})`);
   }
 
+  await page.evaluate(() => document.getElementById('root').setAttribute('dir', 'ltr'));
   await page.evaluate(() => window.__set(50));
   await input.focus();
   await page.keyboard.press('ArrowRight');
