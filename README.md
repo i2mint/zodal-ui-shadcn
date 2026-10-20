@@ -89,6 +89,20 @@ const { collapsedGroups, expandedGroups } = viewState;   // from createViewState
 
 The `ViewConfig` type is declared here structurally (`src/view-types.ts`) and `groupItems` is a local copy, because the `@zodal/ui` on npm this package builds against predates `toViewConfig`; any object of that shape works.
 
+## Slider with a ghost thumb
+
+A number field declared with `editWidget: 'slider'` renders as `GhostSlider`: a range input that, while the person drags, leaves a faded ghost thumb at the saved value (the value at pointer-down, or `savedValue`) so they can see how far they moved; it disappears on release. A readout shows the live value; the form value is written on commit (release, or each key press), not on every move.
+
+```typescript
+const settings = defineCollection(z.object({ volume: z.number().min(0).max(11) }), {
+  fields: { volume: { editWidget: 'slider' } },
+});
+```
+
+Bounds and step come from the form config when it carries them (`bounds: { min, max }`, `step`; `toFormConfig` does not project them yet: i2mint/zodal#43), else 0..100 by 1. `GhostSlider` is also exported on its own (`value`, `onValueChange`, `onValueCommit`, `min`, `max`, `step`, `savedValue`, `thumbSize`); `thumbSize` must match the thumb's rendered width (16px by default), because a range input insets its thumb by half that width at each end and the ghost is inset the same way. Single value, horizontal, left-to-right, controlled only.
+
+`pnpm test:browser` checks the ghost's placement in headless Chromium (needs a Chromium for playwright-core, `npx playwright-core install chromium`); it is not part of `pnpm test`.
+
 ## Customization
 
 ### Override individual renderers
