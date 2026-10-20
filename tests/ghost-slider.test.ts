@@ -56,7 +56,7 @@ describe('GhostSlider', () => {
     act(() => input.dispatchEvent(new Event('pointerdown', { bubbles: true })));
     expect(ghost(c)).toBeNull(); // not moved yet: the ghost would sit under the thumb
     rerender(slider({ value: 60 }));
-    expect(ghost(c)?.style.left).toBe(thumbLeft(30));
+    expect(ghost(c)?.style.insetInlineStart).toBe(thumbLeft(30));
     act(() => window.dispatchEvent(new Event('pointerup')));
     expect(ghost(c)).toBeNull();
   });
@@ -65,7 +65,7 @@ describe('GhostSlider', () => {
     const c = mount(slider({ value: 30, savedValue: 10 }));
     act(() => c.querySelector('input')!.dispatchEvent(new Event('pointerdown', { bubbles: true })));
     rerender(slider({ value: 40, savedValue: 10 }));
-    expect(ghost(c)?.style.left).toBe(thumbLeft(10));
+    expect(ghost(c)?.style.insetInlineStart).toBe(thumbLeft(10));
     act(() => window.dispatchEvent(new Event('pointercancel')));
     rerender(slider({ value: 30, disabled: true }));
     act(() => c.querySelector('input')!.dispatchEvent(new Event('pointerdown', { bubbles: true })));

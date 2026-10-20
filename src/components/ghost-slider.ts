@@ -10,10 +10,12 @@
  * The one trap: a range input does not put the thumb's centre at `value%`. It keeps the thumb
  * inside the track, insetting it by up to half its width at each end (Radix does the same, its
  * `getThumbInBoundsOffset`), so the ghost is placed by {@link thumbLeft}, and `thumbSize` must
- * match the thumb's rendered width.
+ * match the thumb's rendered width. The offset is applied as `inset-inline-start` (and the
+ * ghost centred with `margin-inline-start`), so under `dir="rtl"`, where the browser mirrors
+ * the range input, the ghost mirrors with it.
  *
- * Scope: single value, horizontal, left-to-right, controlled (`value`). Not handled yet:
- * vertical, RTL, ranges (one ghost per thumb), uncontrolled use.
+ * Scope: single value, horizontal, controlled (`value`), either writing direction. Not handled
+ * yet: vertical, ranges (one ghost per thumb), uncontrolled use.
  */
 
 import React from 'react';
@@ -24,8 +26,9 @@ const h = React.createElement;
 export const DEFAULT_THUMB_SIZE_PX = 16;
 
 /**
- * Where a thumb's centre sits for `percent` (0 to 100) along a horizontal track, as a CSS
- * `left`: the thumb is inset by half its width at 0 and at 100.
+ * Where a thumb's centre sits for `percent` (0 to 100) along a horizontal track, measured from
+ * the track's start edge (a CSS `left` in LTR, `inset-inline-start` in either direction): the
+ * thumb is inset by half its width at 0 and at 100.
  */
 export function thumbLeft(percent: number, thumbSizePx: number = DEFAULT_THUMB_SIZE_PX): string {
   const half = thumbSizePx / 2;
@@ -144,11 +147,13 @@ export function GhostSlider({
             position: 'absolute',
             pointerEvents: 'none',
             boxSizing: 'border-box',
-            left: thumbLeft(valuePercent(ghost, min, max), thumbSize),
+            // Logical properties, so the ghost follows the input when it mirrors under RTL.
+            insetInlineStart: thumbLeft(valuePercent(ghost, min, max), thumbSize),
+            marginInlineStart: -thumbSize / 2,
             width: thumbSize,
             height: thumbSize,
             top: '50%',
-            transform: 'translate(-50%, -50%)',
+            transform: 'translateY(-50%)',
           },
         })
       : null,
