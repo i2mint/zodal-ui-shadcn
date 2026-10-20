@@ -64,6 +64,31 @@ console.table(scores);
 
 Each fallback matches only its own mode, so a form or a filter never resolves to a table cell. Other types (object, record, map, union, `bigint`, ...) have no fallback filter: unless a specific filter matches (a `bigint` inferred as `range` gets `RangeFilter`), `registry.resolve(field, { mode: 'filter' })` returns `null`.
 
+## Collection views: a list or a grid, grouped and collapsible
+
+`CollectionView` draws the whole collection from a `ViewConfig` (`toViewConfig(collection, 'list' | 'grid')` in `@zodal/ui`): list rows or grid cards showing each item's image, label, badges and secondary text, bucketed into groups whose headers collapse and expand when the collection declares `groupBy.collapsible`.
+
+```tsx
+import { toViewConfig } from '@zodal/ui';
+import { CollectionView } from '@zodal/ui-shadcn';
+
+const view = toViewConfig(instruments, 'grid');
+const { collapsedGroups, expandedGroups } = viewState;   // from createViewStateStore(...).get()
+
+<CollectionView
+  items={items} config={view}
+  collapsedGroups={collapsedGroups} expandedGroups={expandedGroups}
+  onToggleGroup={(id) => viewStore.toggleGroup(id)}      // persist the collapse
+  onOperation={(op, item) => run(op.name, item)}         // edit, delete, declared item operations
+  selectedIds={selectedIds} onSelect={(id, on) => select(id, on)}
+  onCollectionOperation={(op, selected) => run(op.name, selected)}
+/>
+```
+
+`ListItem` and `GridCard` draw one item; `renderValue` lets a registry cell component draw a field. A header click toggles its group at once and calls `onToggleGroup`; new `collapsedGroups` / `expandedGroups` props take over. Plain HTML with Tailwind classes, like the other renderers here.
+
+The `ViewConfig` type is declared here structurally (`src/view-types.ts`) and `groupItems` is a local copy, because the `@zodal/ui` on npm this package builds against predates `toViewConfig`; any object of that shape works.
+
 ## Customization
 
 ### Override individual renderers
