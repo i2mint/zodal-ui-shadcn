@@ -12,12 +12,14 @@ src/
   types.ts             — Shared prop types (CellProps, FormFieldProps, FilterFieldProps)
   registry.ts          — createShadcnRegistry() factory
   view-types.ts        — Structural ViewConfig (mirror of @zodal/ui's toViewConfig output; npm lacks it yet)
+  options-form-types.ts — Structural OptionsFormField + optionsFieldAffordance (same reason as view-types)
   group-items.ts       — Local copy of @zodal/ui groupItems/groupId (same reason)
   components/
     ghost-slider.ts    — GhostSlider: native range input + ghost thumb at the saved value (editWidget 'slider')
   renderers/
     cell-renderers.ts  — Table cell renderers (text, number, boolean, date, badge, array, currency)
     form-renderers.ts  — Form field renderers (text, number, checkbox, select, date)
+    options-form-renderers.ts — Options-form widgets keyed on editWidget: fieldset, password, code
     filter-renderers.ts — Filter widget renderers (text, select, range, boolean)
     view-renderers.ts  — Collection view: CollectionView, ListItem, GridCard
 tests/

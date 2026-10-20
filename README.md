@@ -52,6 +52,9 @@ console.table(scores);
 | `CheckboxInput` | `boolean` | Checkbox with label |
 | `SelectInput` | `enum` | Dropdown select |
 | `DateInput` | `date` | Date picker |
+| `FieldsetInput` | `editWidget: 'fieldset'` (options forms) | A nested object's fields inside a `<fieldset>` |
+| `PasswordInput` | `editWidget: 'password'` (options forms) | Masked; never prefilled from a stored value |
+| `CodeNote` | `editWidget: 'code'` (options forms) | "Supplied in code" note, never an input |
 
 ### Filter Renderers (data filtering)
 
@@ -102,6 +105,28 @@ const settings = defineCollection(z.object({ volume: z.number().min(0).max(11) }
 Bounds and step come from the form config when it carries them (`bounds: { min, max }`, `step`; `toFormConfig` does not project them yet: i2mint/zodal#43), else 0..100 by 1. `GhostSlider` is also exported on its own (`value`, `onValueChange`, `onValueCommit`, `min`, `max`, `step`, `savedValue`, `thumbSize`); `thumbSize` must match the thumb's rendered width (16px by default), because a range input insets its thumb by half that width at each end and the ghost is inset the same way. Single value, horizontal, left-to-right, controlled only.
 
 `pnpm test:browser` checks the ghost's placement in headless Chromium (needs a Chromium for playwright-core, `npx playwright-core install chromium`); it is not part of `pnpm test`.
+
+## Options forms (settings, provider options)
+
+`@zodal/ui`'s `toOptionsFormConfig(schema)` describes a settings-like object as form fields, with three widget types beyond a record form's: `'fieldset'` (a nested object, drawn as a `<fieldset>` of its fields), `'password'` (a secret: masked, never prefilled from a stored value) and `'code'` (a function, a client or a structured secret: a "Supplied in code" note, never an input). Resolve each field through `optionsFieldAffordance`:
+
+```tsx
+import { createShadcnRegistry, optionsFieldAffordance } from '@zodal/ui-shadcn';
+
+const registry = createShadcnRegistry();
+
+function OptionsForm({ fields, options, setOptions }) {
+  return fields.map((f) => {
+    const Field = registry.resolve(optionsFieldAffordance(f), { mode: 'form' })!;
+    return <Field key={f.name} config={f}
+      field={{ value: options[f.name], onChange: (v) => setOptions((o) => ({ ...o, [f.name]: v })) }} />;
+  });
+}
+```
+
+`optionsFieldAffordance` sends a `secret` field to `PasswordInput` and a `suppliedInCode` one to `CodeNote` whatever its `type`, so neither can land in an input that shows or edits the value. A fieldset binds each child to the last segment of its `path` and writes the whole object back; it keeps a running value, so two child edits with no re-render in between both survive, and a new value from outside replaces it. Children are drawn through this package's registry, or through `renderField` when given. A password input writes `undefined` when emptied, never `''` over the stored secret, and shows `(unchanged)` as its placeholder while one is stored.
+
+The `OptionsFormField` type is declared here structurally (`src/options-form-types.ts`), like `ViewConfig`, because the `@zodal/ui` on npm predates `toOptionsFormConfig`; any object of that shape works.
 
 ## Customization
 
