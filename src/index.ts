@@ -9,3 +9,6 @@ export type { ItemViewProps, CollectionViewProps, ValueRenderer } from './render
 export { groupItems, groupId } from './group-items.js';
 export type { ItemGroup, GroupItemsOptions } from './group-items.js';
 export type { ViewConfig, ViewFieldConfig, ViewGroupConfig, ViewOperationConfig } from './view-types.js';
+export { GhostSlider, thumbLeft, valuePercent, DEFAULT_THUMB_SIZE_PX } from './components/ghost-slider.js';
+export type { GhostSliderProps } from './components/ghost-slider.js';
+export { sliderRange, SLIDER_DEFAULTS } from './renderers/form-renderers.js';

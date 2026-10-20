@@ -8,6 +8,7 @@ import React from 'react';
 import { PRIORITY } from '@zodal/ui';
 import type { RendererEntry } from '@zodal/ui';
 import type { FormFieldProps } from '../types.js';
+import { GhostSlider } from '../components/ghost-slider.js';
 
 function TextInput({ field, config }: FormFieldProps) {
   return React.createElement('div', null,
@@ -178,6 +179,54 @@ function ReadOnlyInput({ field, config }: FormFieldProps) {
   );
 }
 
+/** Default slider bounds when the form config carries none. */
+export const SLIDER_DEFAULTS = { min: 0, max: 100, step: 1 } as const;
+
+/**
+ * The bounds and step a slider uses. `FormFieldConfig` does not carry them yet (i2mint/zodal#43
+ * proposes `bounds` and `step`, the shape `FilterFieldConfig.bounds` already has), so they are
+ * read structurally when present, else the defaults.
+ */
+export function sliderRange(config: object): { min: number; max: number; step: number } {
+  const c = config as { bounds?: { min?: number; max?: number }; step?: number; min?: number; max?: number };
+  const pick = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+  return {
+    min: pick(c.bounds?.min ?? c.min, SLIDER_DEFAULTS.min),
+    max: pick(c.bounds?.max ?? c.max, SLIDER_DEFAULTS.max),
+    step: pick(c.step, SLIDER_DEFAULTS.step),
+  };
+}
+
+/** A bounded number as a slider with a ghost thumb; the form value is written on commit. */
+function SliderInput({ field, config }: FormFieldProps) {
+  const { min, max, step } = sliderRange(config);
+  const saved = typeof field.value === 'number' ? field.value : Number(field.value ?? min);
+  const committed = Number.isFinite(saved) ? saved : min;
+  const [live, setLive] = React.useState(committed);
+  // A new value from outside (reset, load) replaces the one being shown.
+  React.useEffect(() => setLive(committed), [committed]);
+  const labelId = `${config.name}-label`;
+  return React.createElement('div', null,
+    React.createElement('label', { id: labelId, htmlFor: config.name }, config.label),
+    React.createElement('div', { className: 'flex items-center gap-3' },
+      React.createElement(GhostSlider, {
+        id: config.name,
+        name: config.name,
+        value: live,
+        min,
+        max,
+        step,
+        disabled: config.disabled,
+        'aria-labelledby': labelId,
+        onValueChange: setLive,
+        onValueCommit: (v: number) => field.onChange(v),
+      }),
+      React.createElement('output', { htmlFor: config.name, className: 'w-12 text-right text-sm tabular-nums' }, String(live)),
+    ),
+    config.helpText && React.createElement('p', { className: 'text-sm text-muted-foreground' }, config.helpText),
+  );
+}
+
 export const formRenderers: RendererEntry<React.ComponentType<FormFieldProps>>[] = [
   // Fallback: shown, never edited, for any type without its own form renderer
   {
@@ -214,6 +263,12 @@ export const formRenderers: RendererEntry<React.ComponentType<FormFieldProps>>[]
     tester: (field, ctx) => ctx.mode === 'form' && field.zodType === 'bigint' ? PRIORITY.DEFAULT : -1,
     renderer: BigIntInput,
     name: 'BigIntInput',
+  },
+  // editWidget: 'slider' (a bounded number), above the type-based inputs
+  {
+    tester: (field, ctx) => ctx.mode === 'form' && field.editWidget === 'slider' ? PRIORITY.LIBRARY : -1,
+    renderer: SliderInput,
+    name: 'SliderInput',
   },
   // Date
   {

@@ -13,6 +13,8 @@ src/
   registry.ts          — createShadcnRegistry() factory
   view-types.ts        — Structural ViewConfig (mirror of @zodal/ui's toViewConfig output; npm lacks it yet)
   group-items.ts       — Local copy of @zodal/ui groupItems/groupId (same reason)
+  components/
+    ghost-slider.ts    — GhostSlider: native range input + ghost thumb at the saved value (editWidget 'slider')
   renderers/
     cell-renderers.ts  — Table cell renderers (text, number, boolean, date, badge, array, currency)
     form-renderers.ts  — Form field renderers (text, number, checkbox, select, date)
@@ -20,6 +22,7 @@ src/
     view-renderers.ts  — Collection view: CollectionView, ListItem, GridCard
 tests/
   registry.test.ts     — Registry resolution tests
+  browser/             — `pnpm test:browser`: layout checks in headless Chromium (playwright-core), not in CI
 ```
 
 ## Key Patterns
