@@ -38,7 +38,11 @@ afterEach(() => {
  * Mount an options field. With `stateful`, the host keeps each written value (a re-render
  * follows every edit); without it, the value never changes (no re-render between edits).
  */
-function mount(config: OptionsFormField, initial: unknown, { stateful = false } = {}) {
+function mount(
+  config: OptionsFormField,
+  initial: unknown,
+  { stateful = false, extra = {} as Record<string, unknown> } = {},
+) {
   const Component = registry.resolve(optionsFieldAffordance(config), { mode: 'form' })!;
   const written: unknown[] = [];
   let setOutside: (v: unknown) => void = () => {};
@@ -46,6 +50,7 @@ function mount(config: OptionsFormField, initial: unknown, { stateful = false } 
     const [value, setValue] = React.useState<unknown>(initial);
     setOutside = setValue;
     return React.createElement(Component, {
+      ...extra,
       config,
       field: { value, onChange: (v: unknown) => { written.push(v); if (stateful) setValue(v); } },
     });
@@ -53,7 +58,8 @@ function mount(config: OptionsFormField, initial: unknown, { stateful = false } 
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
-  act(() => root!.render(React.createElement(Host)));
+  // StrictMode renders twice and replays effects, so a render with side effects shows up here.
+  act(() => root!.render(React.createElement(React.StrictMode, null, React.createElement(Host))));
   const type = (input: HTMLInputElement, text: string) => act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, text);
     input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -79,6 +85,7 @@ describe('options-form widget types (#12)', () => {
     const input = node.querySelector('input')!;
     expect(input.type).toBe('password');
     expect(input.value).toBe('');
+    expect(input.getAttribute('value') ?? '').toBe('');
     expect(node.innerHTML).not.toContain('stored-secret');
     expect(input.placeholder).toBe('(unchanged)');
     type(input, 'new');
@@ -89,9 +96,20 @@ describe('options-form widget types (#12)', () => {
     const { node, type, written } = mount(s3Options[1], 'stored', { stateful: true });
     const input = node.querySelector('input')!;
     type(input, 'x');
+    expect(input.placeholder).toBe('(unchanged)');
     type(input, '');
     expect(written).toEqual(['x', undefined]);
-    expect(node.innerHTML).not.toContain('stored');
+    expect(input.value).toBe('');
+  });
+
+  it('clears what was typed in a secret when the value changes from outside', () => {
+    const { node, type, reset } = mount(s3Options[1], 'stored', { stateful: true });
+    const input = node.querySelector('input')!;
+    type(input, 'typed');
+    expect(input.value).toBe('typed');
+    reset('saved-elsewhere');
+    expect(input.value).toBe('');
+    expect(node.innerHTML).not.toContain('saved-elsewhere');
   });
 
   it('shows a value supplied in code as a note, never an input', () => {
@@ -131,5 +149,81 @@ describe('options-form widget types (#12)', () => {
     expect(backoff.value).toBe('');
     type(backoff, '4');
     expect(written.at(-1)).toEqual({ attempts: 9, backoff: 4 });
+  });
+
+  const nested: OptionsFormField = {
+    ...base, name: 'outer', path: ['outer'], label: 'Outer', type: 'fieldset', zodType: 'object',
+    fields: [
+      { ...base, name: 'outer.a', path: ['outer', 'a'], label: 'A', type: 'number', zodType: 'number' },
+      {
+        ...base, name: 'outer.inner', path: ['outer', 'inner'], label: 'Inner', type: 'fieldset', zodType: 'object',
+        fields: [
+          { ...base, name: 'outer.inner.x', path: ['outer', 'inner', 'x'], label: 'X', type: 'number', zodType: 'number' },
+          { ...base, name: 'outer.inner.y', path: ['outer', 'inner', 'y'], label: 'Y', type: 'number', zodType: 'number' },
+        ],
+      },
+    ],
+  };
+
+  it('keeps every edit in a nested fieldset with no re-render between them', () => {
+    const { node, type, written } = mount(nested, { a: 1, inner: { x: 0 } });
+    expect(node.querySelectorAll('fieldset')).toHaveLength(2);
+    const [a, x, y] = node.querySelectorAll('input');
+    type(x, '7');
+    type(y, '8');
+    type(a, '2');
+    expect(written.at(-1)).toEqual({ a: 2, inner: { x: 7, y: 8 } });
+  });
+
+  it('keeps the stored secret when a secret in a fieldset is typed and emptied again', () => {
+    const creds: OptionsFormField = {
+      ...base, name: 'creds', path: ['creds'], label: 'Credentials', type: 'fieldset', zodType: 'object',
+      fields: [{ ...base, name: 'creds.key', path: ['creds', 'key'], label: 'Key', type: 'password', zodType: 'string', secret: true }],
+    };
+    const { node, type, written } = mount(creds, { key: 'stored' }, { stateful: true });
+    const input = node.querySelector('input')!;
+    expect(input.value).toBe('');
+    type(input, 'new');
+    type(input, '');
+    expect(written).toEqual([{ key: 'new' }, { key: 'stored' }]);
+    expect(node.innerHTML).not.toContain('stored');
+  });
+
+  it('skips hidden children and disables every child of a disabled fieldset', () => {
+    const fs: OptionsFormField = {
+      ...retryTwo, disabled: true,
+      fields: [retryTwo.fields![0], { ...retryTwo.fields![1], hidden: true }],
+    };
+    const seen: OptionsFormField[] = [];
+    const { node } = mount(fs, {}, {
+      extra: { renderField: (p: { config: OptionsFormField }) => { seen.push(p.config); return null; } },
+    });
+    expect((node.firstElementChild as HTMLFieldSetElement).disabled).toBe(true);
+    expect(seen.map((c) => [c.name, c.disabled])).toEqual(
+      expect.arrayContaining([['retry.attempts', true]]),
+    );
+    expect(seen.some((c) => c.name === 'retry.backoff')).toBe(false);
+  });
+
+  it('draws children with a renderField that uses hooks', () => {
+    function useLabel(label: string) {
+      const [text] = React.useState(`custom ${label}`);
+      return text;
+    }
+    const renderField = (p: { config: OptionsFormField }) =>
+      React.createElement('span', { 'data-child': p.config.name }, useLabel(p.config.label));
+    const { node } = mount(retryTwo, {}, { extra: { renderField } });
+    expect([...node.querySelectorAll('[data-child]')].map((e) => e.textContent)).toEqual(['custom Attempts', 'custom Backoff']);
+  });
+
+  it("resolves children through the host's registry when given one", () => {
+    const host = createShadcnRegistry();
+    host.register({
+      tester: (f, ctx) => (ctx.mode === 'form' && f.zodType === 'number' ? 1000 : -1),
+      renderer: () => React.createElement('output', null, 'overridden'),
+      name: 'Override',
+    });
+    const { node } = mount(retryTwo, {}, { extra: { registry: host } });
+    expect([...node.querySelectorAll('output')].map((e) => e.textContent)).toEqual(['overridden', 'overridden']);
   });
 });

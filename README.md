@@ -124,7 +124,11 @@ function OptionsForm({ fields, options, setOptions }) {
 }
 ```
 
-`optionsFieldAffordance` sends a `secret` field to `PasswordInput` and a `suppliedInCode` one to `CodeNote` whatever its `type`, so neither can land in an input that shows or edits the value. A fieldset binds each child to the last segment of its `path` and writes the whole object back; it keeps a running value, so two child edits with no re-render in between both survive, and a new value from outside replaces it. Children are drawn through this package's registry, or through `renderField` when given. A password input writes `undefined` when emptied, never `''` over the stored secret, and shows `(unchanged)` as its placeholder while one is stored.
+The loop runs over the top-level fields (a nested object arrives as one `'fieldset'` field, keyed by its top-level name). `optionsFieldAffordance` sends a `secret` field to `PasswordInput` and a `suppliedInCode` one to `CodeNote` whatever its `type`, so neither can land in an input that shows or edits the value.
+
+A fieldset binds each child to the last segment of its `path` and writes the whole object back. It keeps a running value, so two child edits with no re-render in between both survive, and a new value from outside replaces it. Children resolve through the `registry` prop when given (pass your own registry so your overrides apply inside fieldsets too), else through `createShadcnRegistry()`; a `renderField` prop draws them instead, and may use hooks. A disabled fieldset disables every child.
+
+A password input holds only what the person types, never the stored value, and clears it when the value changes from outside (a save, a reset). It shows `(unchanged)` as its placeholder while a value is stored, and writes `undefined`, never `''`, when emptied again: "no new value". Inside a fieldset that puts the stored secret back under its key; at the top level, your `onChange` decides (keep the stored secret when it receives `undefined` for a `secret` field).
 
 The `OptionsFormField` type is declared here structurally (`src/options-form-types.ts`), like `ViewConfig`, because the `@zodal/ui` on npm predates `toOptionsFormConfig`; any object of that shape works.
 
