@@ -110,7 +110,7 @@ describe('which renderer wins, per mode (pinned)', () => {
     ['form', { zodType: 'array' }, 'ReadOnlyInput (fallback)'],
     ['form', { zodType: 'object' }, 'ReadOnlyInput (fallback)'],
     ['form', { zodType: 'set' }, 'ReadOnlyInput (fallback)'],
-    ['form', { zodType: 'bigint' }, 'ReadOnlyInput (fallback)'],
+    ['form', { zodType: 'bigint' }, 'BigIntInput'],
     ['filter', { zodType: 'string', filterable: 'search' }, 'TextFilter'],
     ['filter', { zodType: 'string', filterable: 'exact' }, 'TextFilter (fallback)'],
     ['filter', { zodType: 'enum', filterable: 'select' }, 'SelectFilter'],
@@ -164,5 +164,39 @@ describe('ReadOnlyInput (form fallback)', () => {
     expect(render(new Set(['x', 'y']))).toContain('value="[&quot;x&quot;,&quot;y&quot;]"');
     expect(render(new Map([['k', 1]]))).toContain('value="{&quot;k&quot;:1}"');
     expect(render(undefined)).toContain('value=""');
+  });
+});
+
+describe('displayValue edge cases (#9)', () => {
+  const registry = createShadcnRegistry();
+  const config = { name: 'meta', label: 'Meta' } as any;
+  const render = (value: unknown) => {
+    const Component = registry.resolve(mockField({ zodType: 'object' }), { mode: 'form' })!;
+    return renderToStaticMarkup(React.createElement(Component, { field: { value, onChange: () => {} }, config }));
+  };
+
+  it('shows an Invalid Date instead of throwing, at the top and nested', () => {
+    expect(render(new Date('nope'))).toContain('value="Invalid Date"');
+    expect(render({ d: new Date('nope') })).toContain('value="{&quot;d&quot;:&quot;Invalid Date&quot;}"');
+  });
+
+  it('shows a Map with object keys as its pairs, not [object Object]', () => {
+    const html = render(new Map([[{ a: 1 }, 'x']]));
+    expect(html).not.toContain('[object Object]');
+    expect(html).toContain('value="[[{&quot;a&quot;:1},&quot;x&quot;]]"');
+  });
+
+  it('names functions and keeps nested symbols', () => {
+    function hook() {}
+    expect(render(hook)).toContain('value="[function hook]"');
+    expect(render({ f: hook, s: Symbol('k') })).toContain('value="{&quot;f&quot;:&quot;[function hook]&quot;,&quot;s&quot;:&quot;Symbol(k)&quot;}"');
+  });
+});
+
+describe('DateInput with an Invalid Date (#9)', () => {
+  it('renders an empty picker instead of throwing', () => {
+    const Component = createShadcnRegistry().resolve(mockField({ zodType: 'date' }), { mode: 'form' })!;
+    const html = renderToStaticMarkup(React.createElement(Component, { field: { value: new Date('nope'), onChange: () => {} }, config: { name: 'd', label: 'D' } as any }));
+    expect(html).toContain('value=""');
   });
 });
