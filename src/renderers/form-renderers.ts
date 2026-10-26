@@ -61,7 +61,15 @@ function SelectInput({ field, config }: FormFieldProps) {
     React.createElement('select', {
       id: config.name,
       value: String(field.value ?? ''),
-      onChange: (e: any) => field.onChange(e.target.value),
+      onChange: (e: any) => {
+        const value: string = e.target.value;
+        // Write the option's `raw` back: a numeric choice must stay a number.
+        // (`raw` is typed in @zodal/ui > 0.2.0 only, hence the structural cast.)
+        const option = ((config.options ?? []) as { value: string; raw?: unknown }[]).find((o) => o.value === value);
+        if (option) field.onChange(option.raw ?? option.value);
+        // The placeholder: clearing an optional field means no value, not ''.
+        else field.onChange(value === '' && !config.required ? undefined : value);
+      },
       required: config.required,
       disabled: config.disabled,
     },
@@ -252,9 +260,9 @@ export const formRenderers: RendererEntry<React.ComponentType<FormFieldProps>>[]
     renderer: CheckboxInput,
     name: 'CheckboxInput',
   },
-  // Enum
+  // Closed choice (enum, literal, union of literals): the form config says `select`, see formFieldAffordance
   {
-    tester: (field, ctx) => ctx.mode === 'form' && field.zodType === 'enum' ? PRIORITY.DEFAULT : -1,
+    tester: (field, ctx) => ctx.mode === 'form' && (field.editWidget === 'select' || field.zodType === 'enum') ? PRIORITY.DEFAULT : -1,
     renderer: SelectInput,
     name: 'SelectInput',
   },

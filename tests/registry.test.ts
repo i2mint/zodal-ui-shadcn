@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createShadcnRegistry, cellRenderers } from '../src/index.js';
+import { createShadcnRegistry, cellRenderers, formFieldAffordance } from '../src/index.js';
 import type { ResolvedFieldAffordance } from '@zodal/core';
 
 function mockField(overrides: Partial<ResolvedFieldAffordance> = {}): ResolvedFieldAffordance {
@@ -19,6 +19,26 @@ function mockField(overrides: Partial<ResolvedFieldAffordance> = {}): ResolvedFi
 
 describe('createShadcnRegistry', () => {
   const registry = createShadcnRegistry();
+
+  it('picks SelectInput from the form config widget, whatever the zodType (#21)', () => {
+    const top = (zodType: string, type: string, filterable: unknown) =>
+      registry.explain(formFieldAffordance(mockField({ zodType, filterable } as any), { type }), { mode: 'form' })[0]?.name;
+    // A literal whose filterable was overridden is still a select; an open union (json) never is.
+    expect(top('literal', 'select', 'exact')).toBe('SelectInput');
+    expect(top('union', 'select', 'select')).toBe('SelectInput');
+    expect(top('union', 'json', 'select')).not.toBe('SelectInput');
+  });
+
+  it('SelectInput writes the option raw value back and clears optional fields to undefined (#21)', () => {
+    const Select = registry.resolve(formFieldAffordance(mockField({ zodType: 'literal' }), { type: 'select' }), { mode: 'form' })!;
+    const written: unknown[] = [];
+    const config = { name: 'n', label: 'N', required: false, options: [{ label: '2', value: '2', raw: 2 }, { label: '4', value: '4', raw: 4 }] } as any;
+    const el: any = (Select as any)({ field: { value: 2, onChange: (v: unknown) => written.push(v) }, config });
+    const select = el.props.children[1];
+    select.props.onChange({ target: { value: '4' } });
+    select.props.onChange({ target: { value: '' } });
+    expect(written).toEqual([4, undefined]);
+  });
 
   it('resolves a renderer for string fields in cell mode', () => {
     const component = registry.resolve(mockField({ zodType: 'string' }), { mode: 'cell' });
