@@ -40,6 +40,17 @@ describe('createShadcnRegistry', () => {
     expect(written).toEqual([4, undefined]);
   });
 
+  it('SelectInput keeps falsy raw values (0, false) (#21)', () => {
+    const Select = registry.resolve(formFieldAffordance(mockField({ zodType: 'literal' }), { type: 'select' }), { mode: 'form' })!;
+    const written: unknown[] = [];
+    const config = { name: 'n', label: 'N', required: true, options: [{ label: '0', value: '0', raw: 0 }, { label: 'No', value: 'false', raw: false }] } as any;
+    const el: any = (Select as any)({ field: { value: 0, onChange: (v: unknown) => written.push(v) }, config });
+    const select = el.props.children[1];
+    select.props.onChange({ target: { value: '0' } });
+    select.props.onChange({ target: { value: 'false' } });
+    expect(written).toEqual([0, false]);
+  });
+
   it('resolves a renderer for string fields in cell mode', () => {
     const component = registry.resolve(mockField({ zodType: 'string' }), { mode: 'cell' });
     expect(component).toBeDefined();
