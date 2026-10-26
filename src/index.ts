@@ -4,6 +4,7 @@ export { formRenderers } from './renderers/form-renderers.js';
 export { filterRenderers } from './renderers/filter-renderers.js';
 export { optionsFormRenderers } from './renderers/options-form-renderers.js';
 export type { OptionsFieldProps } from './renderers/options-form-renderers.js';
+export { formFieldAffordance } from './form-field-affordance.js';
 export { optionsFieldAffordance } from './options-form-types.js';
 export type { OptionsFormField } from './options-form-types.js';
 export { contentCellRenderers, contentFormRenderers } from './renderers/content-renderers.js';
