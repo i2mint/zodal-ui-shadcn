@@ -6,6 +6,8 @@ import React from 'react';
 import { PRIORITY } from '@zodal/ui';
 import type { RendererEntry } from '@zodal/ui';
 import type { FilterFieldProps } from '../types.js';
+import { GhostRangeSliderField, type RangeValue } from '../components/ghost-range-slider.js';
+import { linearScale, quantileScale, type SliderScale } from '../components/slider-scale.js';
 
 function TextFilter({ field, config }: FilterFieldProps) {
   return React.createElement('input', {
@@ -48,6 +50,38 @@ function RangeFilter({ field, config }: FilterFieldProps) {
       onChange: (e: any) => field.onChange([min, e.target.value ? Number(e.target.value) : undefined]),
     }),
   );
+}
+
+/**
+ * The scale a range-slider filter uses, read from its config: `quantiles` (the data's
+ * percentiles, see `quantilesOf`) give a percentile-laid-out track; otherwise `bounds` give a
+ * linear one. `FilterFieldConfig` does not carry `quantiles` yet (a typed field is proposed in
+ * i2mint/zodal), so it is read the way `sliderRange` reads form bounds. Null when neither is set.
+ */
+export function rangeSliderScale(config: object): SliderScale | null {
+  const c = config as { quantiles?: number[]; bounds?: { min?: number; max?: number } };
+  if (Array.isArray(c.quantiles) && c.quantiles.length >= 2) return quantileScale(c.quantiles);
+  if (c.bounds?.min !== undefined && c.bounds?.max !== undefined) return linearScale(c.bounds.min, c.bounds.max);
+  return null;
+}
+
+/** A range filter as a two-thumb slider plus two number fields; the filter is written on commit. */
+function RangeSliderFilter({ field, config }: FilterFieldProps) {
+  const scale = React.useMemo(() => rangeSliderScale(config), [config]);
+  const committed: RangeValue = Array.isArray(field.value) ? [field.value[0], field.value[1]] : [undefined, undefined];
+  const [preview, setPreview] = React.useState<RangeValue | null>(null);
+  if (!scale) return React.createElement(RangeFilter, { field, config });
+  return React.createElement(GhostRangeSliderField, {
+    value: preview ?? committed,
+    scale,
+    onValueChange: setPreview,
+    onValueCommit: (v: RangeValue) => {
+      setPreview(null);
+      field.onChange([v[0], v[1]]);
+    },
+    lowLabel: `${config.label} minimum`,
+    highLabel: `${config.label} maximum`,
+  });
 }
 
 function BooleanFilter({ field, config }: FilterFieldProps) {
@@ -99,6 +133,15 @@ export const filterRenderers: RendererEntry<React.ComponentType<FilterFieldProps
     tester: (field, ctx) => ctx.mode === 'filter' && (field as any).filterable === 'multiSelect' ? PRIORITY.DEFAULT : -1,
     renderer: SelectFilter,
     name: 'MultiSelectFilter',
+  },
+  // Range filter as a two-thumb slider: opt in with editWidget 'range-slider', given a scale
+  {
+    tester: (field, ctx) =>
+      ctx.mode === 'filter' && (field as any).filterable === 'range' && (field as any).editWidget === 'range-slider'
+        ? PRIORITY.LIBRARY
+        : -1,
+    renderer: RangeSliderFilter,
+    name: 'RangeSliderFilter',
   },
   // Range filter
   {

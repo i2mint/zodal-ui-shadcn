@@ -17,3 +17,17 @@ export type { ViewConfig, ViewFieldConfig, ViewGroupConfig, ViewOperationConfig 
 export { GhostSlider, thumbLeft, valuePercent, DEFAULT_THUMB_SIZE_PX } from './components/ghost-slider.js';
 export type { GhostSliderProps } from './components/ghost-slider.js';
 export { sliderRange, SLIDER_DEFAULTS } from './renderers/form-renderers.js';
+export {
+  GhostRangeSlider,
+  GhostRangeSliderField,
+  rangePositions,
+  rangeValueAt,
+  DEFAULT_RANGE_THUMB_PX,
+  TOUCH_TARGET_PX,
+  KEY_STEP,
+  PAGE_STEP,
+} from './components/ghost-range-slider.js';
+export type { GhostRangeSliderProps, GhostRangeSliderFieldProps, RangeValue } from './components/ghost-range-slider.js';
+export { linearScale, quantileScale, quantilesOf, DEFAULT_TICK_PERCENTILES } from './components/slider-scale.js';
+export type { SliderScale, SliderTick } from './components/slider-scale.js';
+export { rangeSliderScale } from './renderers/filter-renderers.js';

@@ -106,6 +106,20 @@ Bounds and step come from the form config when it carries them (`bounds: { min, 
 
 `pnpm test:browser` checks the ghost's placement in headless Chromium (needs a Chromium for playwright-core, `npx playwright-core install chromium`); it is not part of `pnpm test`.
 
+## Range slider: two thumbs, ghosts, percentile ticks
+
+A range filter declared with `editWidget: 'range-slider'` renders as `GhostRangeSliderField`: a two-thumb ("double cursor") slider with a pair of number fields bound to it both ways. Each thumb leaves a ghost where its drag started; the filter value (`[min, max]`, `undefined` for an open side) is written on commit (release, a key press, or blur/Enter in a field), not on every move. A thumb pushed to its end means "no bound".
+
+```ts
+fields: { year: { filterable: 'range', editWidget: 'range-slider' } },
+// the filter config may carry the data's percentiles; then the track is laid out by them:
+filterConfig.year.quantiles = quantilesOf(rows.map((r) => r.year)); // 101 values
+```
+
+The scale comes from the config: `quantiles` give a **quantile scale** (equal distances are equal shares of the data, so a skewed distribution gets room where the data is; ticks sit at the 0/10/25/50/75/90/100th percentiles, labelled with the values found there); otherwise `bounds: { min, max }` give a linear one. `FilterFieldConfig` does not type `quantiles` yet, so it is read structurally, as `sliderRange` reads form bounds.
+
+Use the pieces directly too: `GhostRangeSlider` (the slider), `GhostRangeSliderField` (slider + fields; `toInput`/`fromInput` convert units, e.g. dollars shown as millions), and the framework-free scales `linearScale`, `quantileScale`, `quantilesOf`. Colours come from CSS custom properties (`--zodal-range-fill`, `--zodal-range-track`, `--zodal-range-thumb`, `--zodal-range-thumb-border`, `--zodal-range-tick`); the interactive area is 44px tall; thumbs are `role="slider"` with arrows (one percentile on a quantile scale), Page Up/Down, Home/End, one commit per key. `pnpm test:browser` checks ghost placement, single commits, non-crossing and the quantile layout in headless Chromium.
+
 ## Collection forms
 
 Resolve each `toFormConfig` field through `formFieldAffordance`, so a closed choice (an enum, a literal, a union of literals) reaches the select renderer, which writes the option's `raw` value back (numbers stay numbers):
