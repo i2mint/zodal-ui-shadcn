@@ -22,6 +22,7 @@ export {
   GhostRangeSliderField,
   rangePositions,
   rangeValueAt,
+  labelledTicks,
   DEFAULT_RANGE_THUMB_PX,
   TOUCH_TARGET_PX,
   KEY_STEP,
