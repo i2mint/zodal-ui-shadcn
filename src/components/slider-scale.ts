@@ -45,8 +45,8 @@ export function linearScale(min: number, max: number, { tickCount = 5 }: { tickC
     kind: 'linear',
     min,
     max,
-    toPosition: (value) => clamp01((value - min) / span),
-    toValue: (position) => min + clamp01(position) * span,
+    toPosition: (value) => (Number.isNaN(value) ? 0 : clamp01((value - min) / span)),
+    toValue: (position) => min + clamp01(position) * (max - min),
     ticks,
   };
 }
@@ -60,14 +60,17 @@ export const DEFAULT_TICK_PERCENTILES = [0, 10, 25, 50, 75, 90, 100] as const;
  * `quantiles[i]` is the value at percentile `100 * i / (quantiles.length - 1)`, non-decreasing
  * (101 values give whole percentiles; {@link quantilesOf} computes them from raw data). Between
  * two quantiles the scale is linear. Where several quantiles share one value (a plateau: many
- * films released in the same year), that value sits at the middle of the plateau.
+ * films released in the same year), that value sits at the middle of the plateau, except at
+ * the two ends of the track (see `toPosition`). Throws on fewer than two or non-finite values.
  */
 export function quantileScale(
   quantiles: readonly number[],
   { tickPercentiles = DEFAULT_TICK_PERCENTILES }: { tickPercentiles?: readonly number[] } = {},
 ): SliderScale {
-  const q = quantiles.filter((v) => Number.isFinite(v));
-  if (q.length < 2) throw new Error('quantileScale needs at least two finite quantiles');
+  const q = [...quantiles];
+  if (q.length < 2 || !q.every((v) => Number.isFinite(v))) {
+    throw new Error('quantileScale needs at least two quantiles, all finite'); // a dropped NaN would shift every percentile
+  }
   for (let i = 1; i < q.length; i++) {
     if (q[i] < q[i - 1]) throw new Error('quantileScale needs non-decreasing quantiles');
   }
@@ -79,8 +82,11 @@ export function quantileScale(
     return q[i] + (x - i) * (q[i + 1] - q[i]);
   };
 
+  // A value at the data's minimum (or maximum) sits at the track's end, even when many
+  // quantiles share it: a minimum equal to the smallest value excludes nothing, like no
+  // minimum. Inside the track, a value shared by several quantiles sits at their middle.
   const toPosition = (value: number) => {
-    if (value <= q[0]) return 0;
+    if (Number.isNaN(value) || value <= q[0]) return 0;
     if (value >= q[k]) return 1;
     // lo: first index with q >= value; hi: last index with q <= value.
     let a = 0;
@@ -109,6 +115,7 @@ export function quantileScale(
 
 /** `count + 1` quantiles of `values` (linear interpolation, NaN ignored): the input of {@link quantileScale}. */
 export function quantilesOf(values: Iterable<number>, count = 100): number[] {
+  if (!(Number.isInteger(count) && count >= 1)) throw new Error('quantilesOf needs a whole count >= 1');
   const sorted = Array.from(values).filter((v) => Number.isFinite(v)).sort((x, y) => x - y);
   if (!sorted.length) return [];
   return Array.from({ length: count + 1 }, (_, i) => {

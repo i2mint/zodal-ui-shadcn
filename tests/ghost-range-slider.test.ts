@@ -129,7 +129,7 @@ describe('GhostRangeSliderField', () => {
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
 
-  it('previews a valid draft, keeps an invalid one, and commits once on blur', () => {
+  it('previews a valid draft, never refuses a keystroke, and commits once on blur', () => {
     const changes: RangeValue[] = [];
     const commits: RangeValue[] = [];
     const render = (value: RangeValue) =>
@@ -141,20 +141,72 @@ describe('GhostRangeSliderField', () => {
       });
     const el = mount(render([undefined, undefined]));
     const [low] = el.querySelectorAll('input') as unknown as HTMLInputElement[];
+    act(() => low.focus());
     setText(low, '1');
     setText(low, '12');
-    setText(low, '12x');
-    expect(low.value).toBe('12x'); // never refused
-    expect(low.getAttribute('aria-invalid')).toBe('true');
     expect(changes).toEqual([[1, undefined], [12, undefined]]);
     expect(commits).toEqual([]);
-    act(() => low.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    act(() => low.blur());
     expect(commits).toEqual([[12, undefined]]);
     act(() => root!.render(render([12, undefined]))); // the host stores the commit
     expect(low.value).toBe('12');
+    act(() => low.focus());
     setText(low, '');
     act(() => low.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
     expect(commits[1]).toEqual([undefined, undefined]); // empty = no bound
+  });
+
+  it('drops an invalid draft, including the valid prefix typed before it', () => {
+    const changes: RangeValue[] = [];
+    const commits: RangeValue[] = [];
+    const el = mount(
+      React.createElement(GhostRangeSliderField, {
+        value: [undefined, 2000] as RangeValue,
+        scale: linearScale(1900, 2100),
+        onValueChange: (v: RangeValue) => changes.push(v),
+        onValueCommit: (v: RangeValue) => commits.push(v),
+      }),
+    );
+    const [low] = el.querySelectorAll('input') as unknown as HTMLInputElement[];
+    act(() => low.focus());
+    for (const t of ['2', '20', '200', '2005']) setText(low, t); // 2005 > the maximum: crossed
+    expect(low.value).toBe('2005'); // never refused
+    expect(low.getAttribute('aria-invalid')).toBe('true');
+    expect(changes[changes.length - 1]).toEqual([undefined, 2000]); // the preview went back
+    act(() => low.blur());
+    expect(commits).toEqual([]); // not [200, 2000]
+    expect(low.value).toBe('');
+  });
+});
+
+describe('GhostRangeSlider keys', () => {
+  const press = (el: HTMLElement, key: string) =>
+    act(() => el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true })));
+
+  it('moves past rounding and plateaus, and leaves the other side alone', () => {
+    const commits: RangeValue[] = [];
+    let value: RangeValue = [1990, 2000];
+    const render = (scale = linearScale(1990, 2020)) =>
+      React.createElement(GhostRangeSlider, {
+        value,
+        scale,
+        round: Math.round,
+        onValueChange: (v: RangeValue) => (value = v),
+        onValueCommit: (v: RangeValue) => commits.push(v),
+      });
+    const el = mount(render());
+    const [low, high] = el.querySelectorAll('[role=slider]') as unknown as HTMLElement[];
+    press(high, 'ArrowRight');
+    expect(commits[0]).toEqual([1990, 2001]); // a 1% step (0.3 year) still moves a year; low kept
+    act(() => root!.render(render()));
+    press(low, 'ArrowRight');
+    expect(commits[1]).toEqual([1991, 2001]);
+    // A plateau: value 2 spans percentiles 33..67; one press must get off it.
+    value = [undefined, 2];
+    act(() => root!.render(render(quantileScale([0, 1, 2, 2, 2, 10, 100]))));
+    press(high, 'ArrowRight');
+    expect(commits[2][1]).toBeGreaterThan(2);
+    expect(commits[2][0]).toBeUndefined();
   });
 });
 

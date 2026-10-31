@@ -81,6 +81,71 @@ try {
   await page.mouse.up();
   const median = await page.evaluate(() => window.__value[1]);
   check(median > 2300 && median < 2700, `the track's middle is the data's median (~2500, got ${median})`);
+  // A click a few px off a thumb's centre grabs it: no jump, no commit.
+  await page.evaluate((v) => window.__set(v), [900, 4900]);
+  const t0 = await centre(thumbs.nth(0));
+  await page.mouse.click(t0.x + 5, t0.y);
+  check((await page.evaluate(() => window.__commits.length)) === 0, 'a click on a thumb (5px off centre) does not move it');
+
+  // Thumbs together: the first move's direction picks the thumb, both ways.
+  for (const [dx, side] of [[-60, 0], [60, 1]]) {
+    await page.evaluate((v) => window.__set(v), [2500, 2500]);
+    const c = await centre(thumbs.nth(0));
+    await page.mouse.move(c.x, c.y);
+    await page.mouse.down();
+    await page.mouse.move(c.x + dx, c.y, { steps: 5 });
+    await page.mouse.up();
+    const v = await page.evaluate(() => window.__value);
+    const other = 1 - side;
+    check(v[other] === 2500 && v[side] !== 2500, `thumbs together, drag ${dx < 0 ? 'left' : 'right'}: the ${side ? 'high' : 'low'} thumb moves (${JSON.stringify(v)})`);
+  }
+
+  // Synthetic touch pointers on the track area.
+  const pointer = (type, id, x, y) =>
+    page.evaluate(([type, id, x, y]) => {
+      const el = document.querySelector('[data-slot="range-slider-track-area"]');
+      el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: id, pointerType: 'touch', isPrimary: id === 1, clientX: x, clientY: y, button: 0, buttons: type === 'pointerup' || type === 'pointercancel' ? 0 : 1 }));
+    }, [type, id, x, y]);
+
+  // A touch that wobbles less than the slop, then lifts on a thumb: nothing changes.
+  await page.evaluate((v) => window.__set(v), [900, 4900]);
+  let c = await centre(thumbs.nth(1));
+  await pointer('pointerdown', 1, c.x, c.y);
+  await pointer('pointermove', 1, c.x + 3, c.y);
+  await pointer('pointerup', 1, c.x + 3, c.y);
+  check((await page.evaluate(() => window.__commits.length)) === 0, 'a touch that moves under the slop changes nothing');
+
+  // A second finger is ignored.
+  c = await centre(thumbs.nth(1));
+  const low0 = await centre(thumbs.nth(0));
+  await pointer('pointerdown', 1, c.x, c.y);
+  await pointer('pointermove', 1, c.x + 40, c.y);
+  await pointer('pointerdown', 2, low0.x, low0.y);
+  await pointer('pointermove', 2, low0.x + 200, low0.y);
+  await pointer('pointerup', 2, low0.x + 200, low0.y);
+  await pointer('pointerup', 1, c.x + 40, c.y);
+  let commits = await page.evaluate(() => window.__commits);
+  check(commits.length === 1 && commits[0][0] === 900 && commits[0][1] > 4900, `a second finger is ignored (${JSON.stringify(commits)})`);
+
+  // A cancelled touch (the browser took it for a scroll) reverts and commits nothing.
+  await page.evaluate((v) => window.__set(v), [900, 4900]);
+  c = await centre(thumbs.nth(1));
+  await pointer('pointerdown', 1, c.x, c.y);
+  await pointer('pointermove', 1, c.x + 40, c.y);
+  await pointer('pointercancel', 1, c.x + 40, c.y);
+  const after = await page.evaluate(() => [window.__value, window.__commits.length]);
+  check(after[1] === 0 && after[0][1] === 4900, `a cancelled touch reverts (${JSON.stringify(after)})`);
+
+  // Right-to-left page: the track stays left to right, so dragging right still raises the value.
+  await page.evaluate(() => document.documentElement.setAttribute('dir', 'rtl'));
+  await page.evaluate((v) => window.__set(v), [900, 4900]);
+  c = await centre(thumbs.nth(1));
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 40, c.y, { steps: 4 });
+  await page.mouse.up();
+  const rtl = await page.evaluate(() => window.__value);
+  check(rtl[1] > 4900 && rtl[0] === 900, `under dir=rtl, dragging the high thumb right raises it (${JSON.stringify(rtl)})`);
 } finally {
   await browser?.close();
   rmSync(out, { recursive: true, force: true });
