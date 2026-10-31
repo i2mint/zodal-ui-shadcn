@@ -11,6 +11,7 @@ import {
   rangePositions,
   rangeValueAt,
   rangeSliderScale,
+  labelledTicks,
   createShadcnRegistry,
 } from '../src/index.js';
 import type { RangeValue } from '../src/index.js';
@@ -176,6 +177,17 @@ describe('GhostRangeSliderField', () => {
     act(() => low.blur());
     expect(commits).toEqual([]); // not [200, 2000]
     expect(low.value).toBe('');
+  });
+});
+
+describe('labelledTicks', () => {
+  const ticks = [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1].map((position) => ({ position }));
+  const texts = ['1894', '1957', '1983', '2008', '2018', '2023', '2026'];
+
+  it('keeps the ends and the middle, and drops labels that would collide', () => {
+    expect(labelledTicks(ticks, texts, 300)).toEqual([true, false, true, true, true, false, true]);
+    expect(labelledTicks(ticks, texts, 1000)).toEqual(ticks.map(() => true));
+    expect(labelledTicks(ticks, texts, 60)).toEqual([true, false, false, false, false, false, true]);
   });
 });
 

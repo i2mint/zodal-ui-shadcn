@@ -87,6 +87,41 @@ export interface GhostRangeSliderProps {
 
 type Side = 0 | 1;
 
+/** Rough width of a tick label in px at the ticks' 0.75em (about 12px): enough to avoid overlaps. */
+const LABEL_CHAR_PX = 7;
+const LABEL_GAP_PX = 6;
+
+/**
+ * Which ticks get a text label on a track `width` px wide: the two ends always, then the
+ * others from the middle outwards (median, quartiles, tails), each only if its label does not
+ * overlap one already placed. Ticks left unlabelled are still drawn as marks.
+ */
+export function labelledTicks(ticks: readonly { position: number }[], texts: readonly string[], width: number): boolean[] {
+  const n = ticks.length;
+  const keep = new Array<boolean>(n).fill(false);
+  const spans: [number, number][] = [];
+  const span = (i: number): [number, number] => {
+    const w = texts[i].length * LABEL_CHAR_PX;
+    const x = ticks[i].position * width;
+    // the end labels are anchored inward, the others centred (as drawn)
+    if (i === 0) return [x, x + w];
+    if (i === n - 1) return [x - w, x];
+    return [x - w / 2, x + w / 2];
+  };
+  const order = [0, n - 1, ...Array.from({ length: Math.max(n - 2, 0) }, (_, k) => k + 1).sort(
+    (a, b) => Math.abs(ticks[a].position - 0.5) - Math.abs(ticks[b].position - 0.5),
+  )];
+  for (const i of order) {
+    if (i < 0 || i >= n || keep[i]) continue;
+    const [a, b] = span(i);
+    if (i === 0 || i === n - 1 || spans.every(([c, d]) => b + LABEL_GAP_PX <= c || a >= d + LABEL_GAP_PX)) {
+      keep[i] = true;
+      spans.push([a, b]);
+    }
+  }
+  return keep;
+}
+
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 
 /** Positions (0 to 1) of a range value's two thumbs; an open side sits at its end. */
@@ -162,6 +197,20 @@ export function GhostRangeSlider({
 }: GhostRangeSliderProps) {
   const areaRef = React.useRef<HTMLDivElement>(null);
   const [drag, setDrag] = React.useState<Drag | null>(null);
+  const [trackWidth, setTrackWidth] = React.useState(300); // re-measured on mount and resize
+  React.useLayoutEffect(() => {
+    const el = areaRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.getBoundingClientRect().width;
+      if (w > thumbSize) setTrackWidth(w - thumbSize); // no layout (a test DOM): keep the default
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [thumbSize]);
   const dragRef = React.useRef<Drag | null>(null);
   dragRef.current = drag;
   const opts = { round, openEnds };
@@ -350,7 +399,10 @@ export function GhostRangeSlider({
     ),
     showTicks && scale.ticks.length
       ? h('div', { dir: 'ltr', 'data-slot': 'range-slider-ticks', 'aria-hidden': true, style: { position: 'relative', height: 18, margin: `0 ${thumbSize / 2}px` } },
-          ...scale.ticks.map((t, i) => {
+          ...(() => {
+            const texts = scale.ticks.map((t) => format(round(t.value)));
+            const keep = labelledTicks(scale.ticks, texts, trackWidth);
+            return scale.ticks.map((t, i) => {
             const edge = i === 0 ? 'start' : i === scale.ticks.length - 1 ? 'end' : 'mid';
             return h('span', {
               key: `tick${i}`,
@@ -363,8 +415,9 @@ export function GhostRangeSlider({
                 borderLeft: edge === 'mid' ? '1px solid currentColor' : undefined,
                 paddingLeft: edge === 'mid' ? 2 : undefined,
               },
-            }, format(round(t.value)));
-          }),
+            }, keep[i] ? texts[i] : '\u200b'); // an unlabelled tick is still a mark
+          });
+          })(),
         )
       : null,
   );
