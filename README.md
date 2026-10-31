@@ -106,6 +106,22 @@ Bounds and step come from the form config when it carries them (`bounds: { min, 
 
 `pnpm test:browser` checks the ghost's placement in headless Chromium (needs a Chromium for playwright-core, `npx playwright-core install chromium`); it is not part of `pnpm test`.
 
+## Range slider: two thumbs, ghosts, percentile ticks
+
+A range filter declared with `filterWidget: 'range-slider'` (or `editWidget: 'range-slider'`, when the field has no other edit widget) renders as `GhostRangeSliderField`: a two-thumb ("double cursor") slider with a pair of number fields bound to it both ways. The thumb being dragged leaves a ghost where it started; the filter value (`[min, max]`, `undefined` for an open side) is written on commit (release, a tap on the track, a key press, or blur/Enter in a field), not on every move. A thumb pushed to its end means "no bound".
+
+```ts
+fields: { year: { filterable: 'range', filterWidget: 'range-slider' } },
+// give that field's filter config entry the data's percentiles; the track is then laid out by them:
+const filters = toFilterConfig(schema).map((f) => (f.name === 'year' ? { ...f, quantiles: quantilesOf(rows.map((r) => r.year)) } : f));
+```
+
+The scale comes from the config: `quantiles` give a **quantile scale** (equal distances are equal shares of the data, so a skewed distribution gets room where the data is; ticks sit at the 0/10/25/50/75/90/100th percentiles, labelled with the values found there); otherwise `bounds: { min, max }` give a linear one. `FilterFieldConfig` does not type `quantiles` yet, so it is read structurally, as `sliderRange` reads form bounds. An `int` field rounds to whole numbers, a config `step` to its multiples.
+
+Behaviour worth knowing: moving one thumb changes only its side; one pointer at a time; a press on a thumb grabs it without a jump, a press on the track moves the nearer thumb there; a touch drags only after a few pixels sideways and the track lets the page scroll vertically (a cancelled touch reverts); when the thumbs coincide, the first move's direction picks one; a key moves its thumb at least far enough to change the rounded value (arrows one percentile of the track, Page keys ten); the track is laid out left to right under any page direction. In the fields, a keystroke is never refused, a draft that is not a valid value on its side (including one past the other side) is marked `aria-invalid` and changes nothing, and blur/Enter commits only a changed value.
+
+Use the pieces directly too: `GhostRangeSlider` (the slider), `GhostRangeSliderField` (slider + fields; `toInput`/`fromInput` convert units, e.g. dollars shown as millions), and the framework-free scales `linearScale`, `quantileScale`, `quantilesOf`. Colours come from CSS custom properties (`--zodal-range-fill`, `--zodal-range-track`, `--zodal-range-thumb`, `--zodal-range-thumb-border`, `--zodal-range-tick`); the interactive area is 44px tall; the control is a labelled `role="group"` of two `role="slider"` thumbs. `pnpm test:browser` checks, in headless Chromium, ghost placement, single commits, non-crossing, the quantile layout, grabs, coinciding thumbs, touch slop, a second finger, cancel, and right-to-left pages.
+
 ## Collection forms
 
 Resolve each `toFormConfig` field through `formFieldAffordance`, so a closed choice (an enum, a literal, a union of literals) reaches the select renderer, which writes the option's `raw` value back (numbers stay numbers):

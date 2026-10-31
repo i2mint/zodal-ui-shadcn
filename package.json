@@ -1,6 +1,6 @@
 {
   "name": "@zodal/ui-shadcn",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "zodal UI renderer package for shadcn/ui components",
   "type": "module",
   "main": "dist/index.cjs",
@@ -24,7 +24,7 @@
     "prepublishOnly": "pnpm build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "test:browser": "node tests/browser/ghost-slider.browser.mjs"
+    "test:browser": "node tests/browser/ghost-slider.browser.mjs && node tests/browser/ghost-range-slider.browser.mjs"
   },
   "peerDependencies": {
     "@zodal/core": ">=0.1.0 <1.0.0",
