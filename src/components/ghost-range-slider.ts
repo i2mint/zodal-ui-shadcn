@@ -414,8 +414,10 @@ export function GhostRangeSlider({
                 transform: edge === 'start' ? 'none' : edge === 'end' ? 'translateX(-100%)' : 'translateX(-50%)',
                 borderLeft: edge === 'mid' ? '1px solid currentColor' : undefined,
                 paddingLeft: edge === 'mid' ? 2 : undefined,
+                // An unlabelled tick is a short notch, so it never cuts through a neighbour's label.
+                height: keep[i] ? undefined : 5,
               },
-            }, keep[i] ? texts[i] : '\u200b'); // an unlabelled tick is still a mark
+            }, keep[i] ? texts[i] : null);
           });
           })(),
         )
