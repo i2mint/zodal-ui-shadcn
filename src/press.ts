@@ -58,6 +58,20 @@ export const PRESS_CLASS =
 /** Controls inside a pressable press themselves, not the pressable around them. */
 const OWN_PRESS = '[data-zodal-press], button, a[href], input, select, textarea, label, [contenteditable]';
 
+/** Every mounted press's reset, for a back/forward-cache restore: one window listener, not one per row. */
+const resets = new Set<() => void>();
+let pageshowInstalled = false;
+function trackForPageshow(reset: () => void): () => void {
+  if (!pageshowInstalled && typeof window !== 'undefined') {
+    window.addEventListener('pageshow', (e) => {
+      if ((e as PageTransitionEvent).persisted) for (const r of resets) r();
+    });
+    pageshowInstalled = true;
+  }
+  resets.add(reset);
+  return () => void resets.delete(reset);
+}
+
 /**
  * Press feedback for one element: spread the returned props on it (and add {@link PRESS_CLASS}
  * to its classes). `action` may return a promise (or a zodal command result): the element stays
@@ -79,6 +93,8 @@ export function usePress<R>(action: () => R | PromiseLike<R>, options: PressOpti
   latest.current = { action, onSettled };
   const [state, setState] = React.useState<ActionFeedbackState<R>>({ status: 'idle', indicator: false });
   const [pressed, setPressed] = React.useState(false);
+  /** The last outcome shows until the next press starts. */
+  const [outcomeShown, setOutcomeShown] = React.useState(false);
   const feedbackRef = React.useRef<ActionFeedback<[], R> | null>(null);
   if (feedbackRef.current === null) {
     feedbackRef.current = createActionFeedback(() => latest.current.action(), {
@@ -87,6 +103,7 @@ export function usePress<R>(action: () => R | PromiseLike<R>, options: PressOpti
         setState(s);
         if (s.status !== 'pending') {
           setPressed(false);
+          setOutcomeShown(true);
           latest.current.onSettled?.(s);
         }
       },
@@ -95,17 +112,18 @@ export function usePress<R>(action: () => R | PromiseLike<R>, options: PressOpti
   const feedback = feedbackRef.current;
 
   React.useEffect(() => {
-    const onPageshow = (e: PageTransitionEvent) => {
-      if (e.persisted) feedback.reset();
-    };
-    window.addEventListener('pageshow', onPageshow);
+    const untrack = trackForPageshow(feedback.reset);
     return () => {
-      window.removeEventListener('pageshow', onPageshow);
-      feedback.dispose();
+      untrack();
+      feedback.dispose(); // safe to re-mount after: a held outcome is applied, the machine stays usable
     };
   }, [feedback]);
 
-  const owns = (e: React.SyntheticEvent) => e.target instanceof Element && e.target.closest(OWN_PRESS) === e.currentTarget;
+  // `closest` duck-typed, not `instanceof Element`, which fails across realms (a portal into an iframe).
+  const owns = (e: React.SyntheticEvent) => {
+    const target = e.target as Element | null;
+    return typeof target?.closest === 'function' && target.closest(OWN_PRESS) === e.currentTarget;
+  };
   const release = () => setPressed(false);
   const pending = state.status === 'pending';
   const props: PressProps = {
@@ -113,11 +131,13 @@ export function usePress<R>(action: () => R | PromiseLike<R>, options: PressOpti
     'data-pressed': pressed ? '' : undefined,
     'data-pending': pending ? '' : undefined,
     'data-indicator': state.indicator ? '' : undefined,
-    'data-status': state.status === 'success' || state.status === 'error' ? state.status : undefined,
+    'data-status': outcomeShown && (state.status === 'success' || state.status === 'error') ? state.status : undefined,
     'aria-busy': pending ? true : undefined,
     'aria-disabled': pending ? true : undefined,
     onPointerDown: (e) => {
-      if (e.button === 0 && owns(e)) setPressed(true);
+      if (e.button !== 0 || !owns(e)) return;
+      setPressed(true);
+      setOutcomeShown(false);
     },
     onPointerUp: release,
     onPointerCancel: release,

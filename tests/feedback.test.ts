@@ -133,6 +133,32 @@ describe('the feedback contract, for every pressable', () => {
     expect(card.hasAttribute('data-pending')).toBe(false);
   });
 
+  it('a collapsible group header is a pressable too', () => {
+    const grouped = { ...config, group: { field: 'kind', label: 'Kind', collapsible: true, defaultState: 'expanded', multiValued: false, multiValue: 'duplicate', order: [] } } as unknown as ViewConfig;
+    const view = mount(h(CollectionView, { items: [{ ...item, kind: 'x' }], config: grouped }));
+    const header = view.querySelector('[data-role="group-header"]') as HTMLElement;
+    expect(header.hasAttribute('data-zodal-press')).toBe(true);
+    act(() => void header.dispatchEvent(pointer('pointerdown')));
+    expect(header.hasAttribute('data-pressed')).toBe(true);
+    act(() => header.click());
+    expect(header.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('callbacks may return any value (existing expression-bodied handlers still type-check)', () => {
+    const onOperation = (op: { name: string }) => op.name.length;
+    const onOpen = (it: Record<string, unknown>) => Boolean(it.id);
+    mount(h(GridCard, { item, config, onOperation, onOpen }));
+  });
+
+  it('the last outcome is cleared when a new press starts', () => {
+    const view = mount(h(GridCard, { item, config, onOperation: () => undefined }));
+    const button = view.querySelector('[data-operation="launch"]') as HTMLElement;
+    act(() => button.click());
+    expect(button.getAttribute('data-status')).toBe('success');
+    act(() => void button.dispatchEvent(pointer('pointerdown')));
+    expect(button.hasAttribute('data-status')).toBe(false);
+  });
+
   it('usePress runs the latest action and reports a failed command result', async () => {
     const onSettled = vi.fn();
     function Tile({ label }: { label: string }) {

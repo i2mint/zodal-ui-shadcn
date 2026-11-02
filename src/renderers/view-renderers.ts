@@ -47,14 +47,14 @@ export interface ItemViewProps {
    * Called when an operation button is clicked. Without it, no operation is drawn. Return the
    * work's promise (or command result): the button stays pending, and ignores presses, until it settles.
    */
-  onOperation?: (operation: ViewOperationConfig, item: Item) => void | PromiseLike<unknown>;
+  onOperation?: (operation: ViewOperationConfig, item: Item) => unknown;
   /** Override how a value is drawn (e.g. with a cell renderer from the registry). */
   renderValue?: ValueRenderer;
   /**
    * Called when the item itself (outside its buttons) is clicked or activated with Enter. Return
    * the promise of whatever opening takes (a fetch, a lazy route): the item shows it is opening.
    */
-  onOpen?: (item: Item) => void | PromiseLike<unknown>;
+  onOpen?: (item: Item) => unknown;
 }
 
 /** What the collection view takes. */
@@ -70,7 +70,7 @@ export interface CollectionViewProps extends Omit<ItemViewProps, 'item' | 'selec
   /** Ids of the selected items. */
   selectedIds?: readonly string[];
   /** Called for a collection or selection operation (`items`: the selected items, or none); return its promise, as for `onOperation`. */
-  onCollectionOperation?: (operation: ViewOperationConfig, items: Item[]) => void | PromiseLike<unknown>;
+  onCollectionOperation?: (operation: ViewOperationConfig, items: Item[]) => unknown;
   /** Header of the group of items with no value. Default: `'None'`. */
   emptyLabel?: string;
   /** Shown when there are no items. Default: `'No items'`. */
@@ -152,7 +152,6 @@ function OperationButton({ op, run }: { op: ViewOperationConfig; run: RunOperati
     'data-variant': op.variant ?? 'default',
     'data-confirm': op.confirm ? 'true' : undefined,
     title: op.keyboardShortcut ? `${op.label} (${op.keyboardShortcut})` : undefined,
-    'aria-keyshortcuts': op.keyboardShortcut,
     ...props,
   }, op.label, h(PressIndicator, { show: state.indicator }));
 }
@@ -245,6 +244,19 @@ export function GridCard(props: ItemViewProps) {
   );
 }
 
+/** A collapsible group's header: a button with press feedback, like every pressable here. */
+function GroupHeader({ expanded, controls, onToggle, children }: { expanded: boolean; controls: string; onToggle: () => void; children?: React.ReactNode }) {
+  const { props } = usePress(onToggle);
+  return h('button', {
+    type: 'button',
+    className: `${PRESS_CLASS} flex w-full items-center py-2 text-left text-sm font-semibold`,
+    'data-role': 'group-header',
+    'aria-expanded': expanded,
+    'aria-controls': controls,
+    ...props,
+  }, children);
+}
+
 // ============================================================================
 // The collection view
 // ============================================================================
@@ -312,13 +324,10 @@ export function CollectionView(props: CollectionViewProps) {
         h('span', { key: 'count', className: 'ml-2 text-xs text-muted-foreground', 'data-role': 'group-count' }, String(g.items.length)),
       ];
       const header = collapsible
-        ? h('button', {
-            type: 'button',
-            className: 'flex w-full items-center py-2 text-left text-sm font-semibold',
-            'data-role': 'group-header',
-            'aria-expanded': !collapsed,
-            'aria-controls': contentId,
-            onClick: () => {
+        ? h(GroupHeader, {
+            expanded: !collapsed,
+            controls: contentId,
+            onToggle: () => {
               setToggled((t) => ({ ...t, [g.id]: !collapsed }));
               onToggleGroup?.(g.id);
             },
