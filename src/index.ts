@@ -32,3 +32,7 @@ export type { GhostRangeSliderProps, GhostRangeSliderFieldProps, RangeValue } fr
 export { linearScale, quantileScale, quantilesOf, DEFAULT_TICK_PERCENTILES } from './components/slider-scale.js';
 export type { SliderScale, SliderTick } from './components/slider-scale.js';
 export { rangeSliderScale } from './renderers/filter-renderers.js';
+export { usePress, PressIndicator, PRESS_CLASS } from './press.js';
+export type { PressOptions, PressProps } from './press.js';
+export { FEEDBACK_MS, feedbackFor, createActionFeedback, isCommandFailure } from './action-feedback.js';
+export type { FeedbackLevel, ActionStatus, ActionFeedbackState, ActionFeedbackOptions, ActionFeedback, FeedbackClock } from './action-feedback.js';

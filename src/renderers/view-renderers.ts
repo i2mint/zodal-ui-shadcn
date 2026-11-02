@@ -12,12 +12,18 @@
  * start; a header click toggles the group at once and reports it through `onToggleGroup`, so a
  * consumer can persist it (`ViewStateStore.toggleGroup`) and pass the new lists back.
  *
+ * Feedback: every pressable here (operation buttons, an item with `onOpen`) uses `usePress`:
+ * pressed at once on `pointerdown`, pending while the callback's promise is in flight, repeat
+ * presses ignored. Return the promise from `onOperation`, `onCollectionOperation` and `onOpen`
+ * (an app opening, a command dispatching) to get that.
+ *
  * Plain HTML with Tailwind classes, like the other renderers here; swap in shadcn/ui
  * primitives (Card, Badge, Button, Checkbox, Collapsible) by wrapping or re-registering.
  */
 
 import React from 'react';
 import { groupItems } from '../group-items.js';
+import { usePress, PressIndicator, PRESS_CLASS } from '../press.js';
 import type { ViewConfig, ViewFieldConfig, ViewOperationConfig } from '../view-types.js';
 
 type Item = Record<string, unknown>;
@@ -37,12 +43,18 @@ export interface ItemViewProps {
   selected?: boolean;
   /** Called when the selection checkbox changes. Without it, no checkbox is drawn. */
   onSelect?: (id: string, selected: boolean, item: Item) => void;
-  /** Called when an operation button is clicked. Without it, no operation is drawn. */
-  onOperation?: (operation: ViewOperationConfig, item: Item) => void;
+  /**
+   * Called when an operation button is clicked. Without it, no operation is drawn. Return the
+   * work's promise (or command result): the button stays pending, and ignores presses, until it settles.
+   */
+  onOperation?: (operation: ViewOperationConfig, item: Item) => void | PromiseLike<unknown>;
   /** Override how a value is drawn (e.g. with a cell renderer from the registry). */
   renderValue?: ValueRenderer;
-  /** Called when the item itself (outside its buttons) is clicked or activated with Enter. */
-  onOpen?: (item: Item) => void;
+  /**
+   * Called when the item itself (outside its buttons) is clicked or activated with Enter. Return
+   * the promise of whatever opening takes (a fetch, a lazy route): the item shows it is opening.
+   */
+  onOpen?: (item: Item) => void | PromiseLike<unknown>;
 }
 
 /** What the collection view takes. */
@@ -57,8 +69,8 @@ export interface CollectionViewProps extends Omit<ItemViewProps, 'item' | 'selec
   onToggleGroup?: (groupId: string) => void;
   /** Ids of the selected items. */
   selectedIds?: readonly string[];
-  /** Called for a collection or selection operation (`items`: the selected items, or none). */
-  onCollectionOperation?: (operation: ViewOperationConfig, items: Item[]) => void;
+  /** Called for a collection or selection operation (`items`: the selected items, or none); return its promise, as for `onOperation`. */
+  onCollectionOperation?: (operation: ViewOperationConfig, items: Item[]) => void | PromiseLike<unknown>;
   /** Header of the group of items with no value. Default: `'None'`. */
   emptyLabel?: string;
   /** Shown when there are no items. Default: `'No items'`. */
@@ -128,27 +140,26 @@ function badges(item: Item, field: ViewFieldConfig): React.ReactElement[] {
 // Pieces shared by a row and a card
 // ============================================================================
 
-function Operations({ ops, run, className = 'flex gap-1' }: { ops: ViewOperationConfig[]; run: (op: ViewOperationConfig) => void; className?: string }) {
+type RunOperation = (op: ViewOperationConfig) => unknown;
+
+/** One operation button, with press feedback (its own pending state and double-tap guard). */
+function OperationButton({ op, run }: { op: ViewOperationConfig; run: RunOperation }) {
+  const { props, state } = usePress(() => run(op), { stopPropagation: true });
+  return h('button', {
+    type: 'button',
+    className: `${PRESS_CLASS} rounded-md px-2 py-1 text-sm ${op.variant === 'destructive' ? 'text-destructive hover:bg-destructive/10' : 'hover:bg-accent'}`,
+    'data-operation': op.name,
+    'data-variant': op.variant ?? 'default',
+    'data-confirm': op.confirm ? 'true' : undefined,
+    title: op.keyboardShortcut ? `${op.label} (${op.keyboardShortcut})` : undefined,
+    'aria-keyshortcuts': op.keyboardShortcut,
+    ...props,
+  }, op.label, h(PressIndicator, { show: state.indicator }));
+}
+
+function Operations({ ops, run, className = 'flex gap-1' }: { ops: ViewOperationConfig[]; run: RunOperation; className?: string }) {
   if (ops.length === 0) return null;
-  return h('div', { className, 'data-role': 'actions' },
-    ...ops.map((op) =>
-      h('button', {
-        key: op.name,
-        type: 'button',
-        className: op.variant === 'destructive'
-          ? 'rounded-md px-2 py-1 text-sm text-destructive hover:bg-destructive/10'
-          : 'rounded-md px-2 py-1 text-sm hover:bg-accent',
-        'data-operation': op.name,
-        'data-variant': op.variant ?? 'default',
-        'data-confirm': op.confirm ? 'true' : undefined,
-        title: op.keyboardShortcut ? `${op.label} (${op.keyboardShortcut})` : undefined,
-        onClick: (e: React.MouseEvent) => {
-          e.stopPropagation();
-          run(op);
-        },
-      }, op.label),
-    ),
-  );
+  return h('div', { className, 'data-role': 'actions' }, ...ops.map((op) => h(OperationButton, { key: op.name, op, run })));
 }
 
 function labelText(item: Item, config: ViewConfig): string {
@@ -192,18 +203,17 @@ function Body(props: ItemViewProps) {
   );
 }
 
-/** Attributes for the item's root: id, selection, and open on click / Enter. */
-function rootProps({ item, config, selected, onOpen }: ItemViewProps) {
+/**
+ * The item root's attributes and its press feedback: id, selection, and, with `onOpen`, open on
+ * click / Enter with the pressed / pending / guard of `usePress`. A hook: call it unconditionally.
+ */
+function useItemRoot({ item, config, selected, onOpen }: ItemViewProps) {
+  const { props, state } = usePress(() => onOpen?.(item), { enterKey: true });
+  const base = { 'data-id': itemId(item, config), 'aria-selected': selected ? true : undefined };
   return {
-    'data-id': itemId(item, config),
-    'aria-selected': selected ? true : undefined,
-    tabIndex: onOpen ? 0 : undefined,
-    onClick: onOpen ? () => onOpen(item) : undefined,
-    onKeyDown: onOpen
-      ? (e: React.KeyboardEvent) => {
-          if (e.key === 'Enter' && e.target === e.currentTarget) onOpen(item);
-        }
-      : undefined,
+    rootProps: onOpen ? { ...base, tabIndex: 0, ...props } : base,
+    pressClass: onOpen ? ` ${PRESS_CLASS} cursor-pointer` : '',
+    indicator: onOpen ? h(PressIndicator, { show: state.indicator }) : null,
   };
 }
 
@@ -214,10 +224,12 @@ function rootProps({ item, config, selected, onOpen }: ItemViewProps) {
 /** One item as a list row: checkbox, thumbnail, label, badges, secondary text, operations. */
 export function ListItem(props: ItemViewProps) {
   const { item, config, onOperation } = props;
-  return h('li', { className: 'flex items-center gap-3 border-b px-3 py-2', 'data-role': 'list-item', ...rootProps(props) },
+  const { rootProps, pressClass, indicator } = useItemRoot(props);
+  return h('li', { className: `flex items-center gap-3 border-b px-3 py-2${pressClass}`, 'data-role': 'list-item', ...rootProps },
     h(SelectBox, props),
     h(Image, { item, config, className: 'h-10 w-10 shrink-0 rounded' }),
     h('div', { className: 'flex min-w-0 flex-1 flex-col gap-1' }, h(Body, props)),
+    indicator,
     onOperation ? h(Operations, { ops: config.operations.item, run: (op) => onOperation(op, item) }) : null,
   );
 }
@@ -225,9 +237,10 @@ export function ListItem(props: ItemViewProps) {
 /** One item as a grid card: cover image, then label, badges, secondary text, operations. */
 export function GridCard(props: ItemViewProps) {
   const { item, config, onOperation } = props;
-  return h('article', { className: 'flex flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm', 'data-role': 'card', ...rootProps(props) },
+  const { rootProps, pressClass, indicator } = useItemRoot(props);
+  return h('article', { className: `flex flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm${pressClass}`, 'data-role': 'card', ...rootProps },
     h(Image, { item, config, className: 'aspect-video w-full' }),
-    h('div', { className: 'flex flex-col gap-2 p-3' }, h(SelectBox, props), h(Body, props)),
+    h('div', { className: 'flex flex-col gap-2 p-3' }, h(SelectBox, props), h(Body, props), indicator),
     onOperation ? h(Operations, { ops: config.operations.item, run: (op) => onOperation(op, item), className: 'flex gap-1 border-t p-2' }) : null,
   );
 }
