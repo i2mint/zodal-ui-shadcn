@@ -122,6 +122,34 @@ Behaviour worth knowing: moving one thumb changes only its side; one pointer at 
 
 Use the pieces directly too: `GhostRangeSlider` (the slider), `GhostRangeSliderField` (slider + fields; `toInput`/`fromInput` convert units, e.g. dollars shown as millions), and the framework-free scales `linearScale`, `quantileScale`, `quantilesOf`. Colours come from CSS custom properties (`--zodal-range-fill`, `--zodal-range-track`, `--zodal-range-thumb`, `--zodal-range-thumb-border`, `--zodal-range-tick`); the interactive area is 44px tall; the control is a labelled `role="group"` of two `role="slider"` thumbs. `pnpm test:browser` checks, in headless Chromium, ghost placement, single commits, non-crossing, the quantile layout, grabs, coinciding thumbs, touch slop, a second finger, cancel, and right-to-left pages.
 
+## Feedback on every press (on by default)
+
+Every pressable these components draw (operation buttons, collection and selection operations, a `ListItem` or `GridCard` with `onOpen`) acknowledges a press on itself at once and shows that work is going on:
+
+- `data-pressed` on `pointerdown` (CSS `:active` alone does not fire on iOS Safari);
+- `data-pending`, `aria-busy` and `aria-disabled` while the callback's promise runs, with repeat presses ignored;
+- a `PressIndicator` spinner once the wait passes 400 ms, kept at least 500 ms;
+- `data-status` when it settles.
+
+The look is `PRESS_CLASS` (Tailwind `data-[pressed]:` / `data-[pending]:` variants, `touch-manipulation`, `motion-reduce:` fallbacks). **Return the work's promise** from `onOperation`, `onCollectionOperation` and `onOpen` to get the pending state.
+
+For your own components:
+
+```tsx
+import { usePress, PressIndicator, PRESS_CLASS } from '@zodal/ui-shadcn';
+
+function LaunchTile({ app }: { app: { id: string; name: string } }) {
+  const { props, state } = usePress(() => openApp(app.id), { enterKey: true });
+  return (
+    <article {...props} tabIndex={0} className={`${PRESS_CLASS} rounded-lg border p-4`}>
+      {app.name}<PressIndicator show={state.indicator} />
+    </article>
+  );
+}
+```
+
+`createActionFeedback`, `FEEDBACK_MS` and `feedbackFor` are exported too. Why it is the default: i2mint/zodal `docs/adr/0001-feedback-principle.md`.
+
 ## Collection forms
 
 Resolve each `toFormConfig` field through `formFieldAffordance`, so a closed choice (an enum, a literal, a union of literals) reaches the select renderer, which writes the option's `raw` value back (numbers stay numbers):
