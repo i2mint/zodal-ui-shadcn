@@ -47,7 +47,7 @@ console.table(scores);
 | Renderer | Zod Type | Description |
 |----------|----------|-------------|
 | `TextInput` | `string` | Text input with label + help text; a history button when the field has history |
-| `TextareaInput` | `editWidget: 'textarea'` | Multi-line text (`description`, `notes`... or declared); a history button when the field has history |
+| `TextareaInput` | `string` + `editWidget: 'textarea'` | Multi-line text (`description`, `notes`... or declared); a history button when the field has history |
 | `ReadOnlyInput` | any type without its own form renderer (fallback) | Read-only text showing the value (JSON for structured values), so a field of another type is never overwritten with a string |
 | `NumberInput` | `number`, `int`, `float` | Numeric input |
 | `CheckboxInput` | `boolean` | Checkbox with label |
@@ -178,7 +178,8 @@ const Field = registry.resolve(formFieldAffordance(fa, config), ctx);
 - The button (lucide's `rotate-ccw-clock`, inline) is hidden while the history is empty, and named "<label> history".
 - It opens a native `popover` listing past values: the first line, "+N lines" and a relative time per row, pinned first, a filter above 7 entries, a full-value preview, pin and remove per row (Shift+Delete removes the active row), and "Clear history" with Undo.
 - Picking an entry records the current value first (so a pick never loses typing), replaces the value, closes the list and returns focus to the field. Alt+ArrowDown on the field opens the list.
-- Controls are at least 44 px under a coarse pointer; on a narrow screen the list is a bottom sheet.
+- Controls are at least 44 px under a coarse pointer (`minTarget` to change it); on a narrow screen the list is a bottom sheet.
+- "Clear history" clears at once; Undo stays offered for 10 seconds, even if the list is closed and reopened. A store failure (a pick, a pin, a clear) is shown in the list, and a refused pick leaves the field as it was.
 
 For your own field renderers: `FieldHistory` attaches the button and list to any input or textarea (`history`, `config`, `label`, `value`, `onChange`, `fieldRef`), and `useFieldHistory(history, scope)`, `HistoryButton` and `HistoryList` are the pieces it is made of. Record what was used with `recordUse(fields, values, { history })` and start over with `startNewItem(...)`, both from `@zodal/ui`. The types (`FieldHistoryStore`, `HistoryEntry`) are declared here structurally until a `@zodal/ui` that has them is on npm. Design: [field-input-history.md](https://github.com/i2mint/zodal/blob/main/docs/research/field-input-history.md).
 

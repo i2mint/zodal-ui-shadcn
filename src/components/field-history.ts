@@ -15,7 +15,9 @@
  *   Alt+ArrowDown on the field opens the list. The package's text and textarea renderers attach
  *   it when `context.history` and `config.history` are both set; an app attaches it to its own.
  *
- * Plain HTML through React, no new dependency. Design: i2mint/zodal
+ * Plain HTML through React, no new dependency. `historyLine`, `relativeTime` and the two
+ * constants are local copies of `@zodal/ui`'s (the `@zodal/ui` on npm this package builds against
+ * predates them); they become re-exports once it is published. Design: i2mint/zodal
  * `docs/research/field-input-history.md` §4 and §6.4.
  */
 
@@ -27,9 +29,9 @@ const h = React.createElement;
 
 /** Above this many entries the list shows a filter (APG recommends type-ahead above 7). */
 export const HISTORY_FILTER_THRESHOLD = 7;
-/** How long "History cleared. Undo" stays offered, in ms. */
+/** How long "History cleared. Undo" stays offered, in ms (a local copy of `@zodal/ui`'s, which the npm version predates). */
 export const HISTORY_UNDO_MS = 10_000;
-/** The smallest touch target under a coarse pointer, in CSS px (WCAG 2.5.5 enhanced). */
+/** The default smallest touch target under a coarse pointer, in CSS px (WCAG 2.5.5 enhanced); each component takes `minTarget`. */
 export const HISTORY_TOUCH_TARGET_PX = 44;
 /** The query that marks a coarse (touch) pointer. */
 const COARSE_POINTER = '(pointer: coarse)';
@@ -75,9 +77,9 @@ function useCoarsePointer(): boolean {
   return coarse;
 }
 
-/** The inline size that makes a control a 44 px target under a coarse pointer (nothing otherwise). */
-function touchTarget(coarse: boolean): React.CSSProperties | undefined {
-  return coarse ? { minWidth: HISTORY_TOUCH_TARGET_PX, minHeight: HISTORY_TOUCH_TARGET_PX } : undefined;
+/** The inline size that makes a control a `min` px target under a coarse pointer (nothing otherwise). */
+function touchTarget(coarse: boolean, min: number): React.CSSProperties | undefined {
+  return coarse ? { minWidth: min, minHeight: min } : undefined;
 }
 
 // ============================================================================
@@ -196,10 +198,7 @@ export function useFieldHistory(
 // The icon (lucide rotate-ccw-clock)
 // ============================================================================
 
-/**
- * lucide's `rotate-ccw-clock` (the history glyph; lucide's `history` is its deprecated alias),
- * drawn inline. Its path data is from lucide (https://lucide.dev), under the ISC License:
- *
+/*! The path data of HistoryIcon is lucide's `rotate-ccw-clock` (lucide-react 1.34.0, https://lucide.dev).
  * ISC License. Copyright (c) 2026 Lucide Icons and Contributors.
  *
  * Permission to use, copy, modify, and/or distribute this software for any purpose with or without
@@ -213,6 +212,8 @@ export function useFieldHistory(
  * NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
  * PERFORMANCE OF THIS SOFTWARE.
  */
+
+/** lucide's `rotate-ccw-clock` (the history glyph; lucide's `history` is its deprecated alias), drawn inline (licence above). */
 export function HistoryIcon({ size = 16 }: { size?: number }) {
   return h('svg', {
     xmlns: 'http://www.w3.org/2000/svg',
@@ -234,6 +235,7 @@ export function HistoryIcon({ size = 16 }: { size?: number }) {
   );
 }
 
+
 // ============================================================================
 // HistoryButton
 // ============================================================================
@@ -252,13 +254,15 @@ export interface HistoryButtonProps {
   className?: string;
   /** For anchoring the list to the button. */
   buttonRef?: React.Ref<HTMLButtonElement>;
+  /** The smallest target under a coarse pointer, in px. Default: {@link HISTORY_TOUCH_TARGET_PX}. */
+  minTarget?: number;
 }
 
 /**
  * The history button: a ghost icon button, hidden while the history is empty so a first-run form
- * is not cluttered with buttons that do nothing. 44 px under a coarse pointer.
+ * is not cluttered with buttons that do nothing. `minTarget` px (44) under a coarse pointer.
  */
-export function HistoryButton({ label, count, expanded, controls, onToggle, className, buttonRef }: HistoryButtonProps) {
+export function HistoryButton({ label, count, expanded, controls, onToggle, className, buttonRef, minTarget = HISTORY_TOUCH_TARGET_PX }: HistoryButtonProps) {
   const { props } = usePress(onToggle);
   const coarse = useCoarsePointer();
   if (count <= 0) return null;
@@ -268,12 +272,12 @@ export function HistoryButton({ label, count, expanded, controls, onToggle, clas
     type: 'button',
     'aria-label': `${label} history`,
     title: `${label} history (Alt+ArrowDown)`,
-    'aria-haspopup': 'grid',
+    'aria-haspopup': 'dialog',
     'aria-expanded': expanded,
     'aria-controls': controls,
     'data-role': 'history-button',
     className: `${PRESS_CLASS} inline-flex shrink-0 items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${className ?? ''}`.trim(),
-    style: touchTarget(coarse),
+    style: touchTarget(coarse, minTarget),
   }, h(HistoryIcon));
 }
 
@@ -292,15 +296,20 @@ export interface HistoryListProps {
   onPick: (entry: HistoryEntry) => void;
   onRemove: (entry: HistoryEntry) => void;
   onPin: (entry: HistoryEntry, pinned: boolean) => void;
-  /** Forget the whole history; resolves with what was removed, so Undo can put it back. */
-  onClear: () => Promise<readonly HistoryEntry[]>;
-  onRestore: (entries: readonly HistoryEntry[]) => void;
+  /** Forget the whole history (the owner keeps what was removed, for `onUndo`). */
+  onClear: () => void;
+  /** Put a cleared history back; shown as "History cleared. Undo" while set. */
+  onUndo?: () => void;
+  /** A failure to show (a pick, a pin or a clear that the store refused). */
+  error?: string;
   /** The list closes itself: on Escape (`'escape'`: focus goes back to the field) or a click elsewhere (`'dismiss'`: focus stays where it went). */
   onClose: (reason: 'escape' | 'dismiss') => void;
   /** Placed under this element on wide screens; a bottom sheet on narrow ones. */
   anchor?: HTMLElement | null;
   /** The clock for relative times. Default: `Date.now`. */
   now?: () => number;
+  /** The smallest target under a coarse pointer, in px. Default: {@link HISTORY_TOUCH_TARGET_PX}. */
+  minTarget?: number;
 }
 
 /** Below this width the list is a bottom sheet instead of a popover under the button. */
@@ -325,21 +334,21 @@ function place(popover: HTMLElement, anchor: HTMLElement | null | undefined): vo
 }
 
 /**
- * The list of a field's past values, in a native `popover="auto"`: light dismiss and Escape come
- * from the browser (where `popover` is missing, it is shown in place and Escape is handled here).
- * A grid (APG's "combobox with grid popup"): one row per entry, its value cell picks, its action
- * cell pins and removes. Keyboard: ArrowUp/ArrowDown move, Home/End jump, Enter picks,
- * Shift+Delete removes, Escape closes; with a filter, typing filters.
+ * The list of a field's past values, in a native `popover="auto"` dialog: light dismiss and Escape
+ * come from the browser (where `popover` is missing, it is shown in place and Escape is handled
+ * here). A grid (APG's "combobox with grid popup"): one row per entry, its value cell picks, its
+ * action cell pins and removes (both reachable with Tab). Keyboard, on the grid or the filter:
+ * ArrowUp/ArrowDown move, Home/End jump, Enter picks, Shift+Delete removes; Escape closes.
  */
 export function HistoryList(props: HistoryListProps) {
-  const { id, label, entries, onPick, onRemove, onPin, onClear, onRestore, onClose, anchor, now = Date.now } = props;
+  const { id, label, entries, onPick, onRemove, onPin, onClear, onUndo, error, onClose, anchor, now = Date.now, minTarget = HISTORY_TOUCH_TARGET_PX } = props;
   const ref = React.useRef<HTMLDivElement>(null);
   const gridRef = React.useRef<HTMLDivElement>(null);
   const filterRef = React.useRef<HTMLInputElement>(null);
   const [query, setQuery] = React.useState('');
   const [active, setActive] = React.useState(0);
-  const [cleared, setCleared] = React.useState<readonly HistoryEntry[] | null>(null);
   const coarse = useCoarsePointer();
+  const target = touchTarget(coarse, minTarget);
   const latest = React.useRef({ onClose, anchor });
   latest.current = { onClose, anchor };
 
@@ -349,6 +358,7 @@ export function HistoryList(props: HistoryListProps) {
   const activeIndex = Math.min(active, Math.max(0, shown.length - 1));
   const activeEntry = shown[activeIndex];
   const rowId = (entry: HistoryEntry) => `${id}-row-${entry.id}`;
+  const cellId = (entry: HistoryEntry) => `${id}-value-${entry.id}`;
 
   // Open as a popover, placed (once: the anchor may leave, as the button does when a clear
   // empties the history), and focused (the filter, else the grid); a light dismiss closes it.
@@ -372,37 +382,34 @@ export function HistoryList(props: HistoryListProps) {
     };
   }, []);
 
-  // Undo is offered for HISTORY_UNDO_MS after a clear.
-  React.useEffect(() => {
-    if (!cleared) return;
-    const t = setTimeout(() => setCleared(null), HISTORY_UNDO_MS);
-    return () => clearTimeout(t);
-  }, [cleared]);
-
   // Keep the active row in view.
   React.useEffect(() => {
     if (activeEntry) document.getElementById(rowId(activeEntry))?.scrollIntoView?.({ block: 'nearest' });
   }, [activeEntry?.id]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      onClose('escape');
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    // Every other key belongs to the grid or the filter: on a button, Enter presses that button.
+    const onList = e.target === gridRef.current || e.target === filterRef.current;
+    if (!onList) return;
+    const inFilter = e.target === filterRef.current;
     const last = shown.length - 1;
     switch (e.key) {
       case 'ArrowDown': setActive(Math.min(last, activeIndex + 1)); break;
       case 'ArrowUp': setActive(Math.max(0, activeIndex - 1)); break;
-      case 'Home': if (e.target !== filterRef.current) setActive(0); else return; break;
-      case 'End': if (e.target !== filterRef.current) setActive(Math.max(0, last)); else return; break;
-      case 'Enter': if (activeEntry) onPick(activeEntry); break;
-      case 'Delete': if (e.shiftKey && activeEntry) onRemove(activeEntry); else return; break;
-      case 'Escape': onClose('escape'); break;
+      case 'Home': if (inFilter) return; setActive(0); break;
+      case 'End': if (inFilter) return; setActive(Math.max(0, last)); break;
+      case 'Enter': if (!activeEntry) return; onPick(activeEntry); break;
+      case 'Delete': if (!e.shiftKey || !activeEntry) return; onRemove(activeEntry); break;
       default: return;
     }
     e.preventDefault();
     e.stopPropagation();
-  };
-
-  const clearAll = async () => {
-    const removed = await onClear();
-    if (removed.length) setCleared(removed);
   };
 
   const row = (entry: HistoryEntry, index: number) => {
@@ -419,13 +426,13 @@ export function HistoryList(props: HistoryListProps) {
       className: `flex items-center gap-1 rounded px-1 ${isActive ? 'bg-accent text-accent-foreground' : ''}`,
       onMouseEnter: () => setActive(index),
     },
-      h('div', { role: 'gridcell', className: 'min-w-0 flex-1' },
+      h('div', { role: 'gridcell', id: cellId(entry), className: 'min-w-0 flex-1' },
         h(RowButton, {
           onPress: () => onPick(entry),
           className: 'flex w-full min-w-0 items-baseline gap-2 py-1.5 text-left',
           'data-role': 'history-pick',
-          tabIndex: -1,
-          style: touchTarget(coarse),
+          tabIndex: -1, // the grid's Enter picks; Tab goes to the row's actions
+          style: target,
         },
           h('span', { className: 'truncate' }, first),
           extraLines > 0 && h('span', { className: 'shrink-0 text-xs text-muted-foreground' }, `+${extraLines} ${extraLines === 1 ? 'line' : 'lines'}`),
@@ -438,17 +445,15 @@ export function HistoryList(props: HistoryListProps) {
           'aria-label': entry.pinned ? `Unpin "${first}"` : `Pin "${first}"`,
           'aria-pressed': Boolean(entry.pinned),
           'data-role': 'history-pin',
-          tabIndex: -1,
           className: 'rounded p-1 text-xs text-muted-foreground hover:text-foreground',
-          style: touchTarget(coarse),
+          style: target,
         }, entry.pinned ? 'Unpin' : 'Pin'),
         h(RowButton, {
           onPress: () => onRemove(entry),
           'aria-label': `Remove "${first}" from history`,
           'data-role': 'history-remove',
-          tabIndex: -1,
           className: 'rounded p-1 text-xs text-muted-foreground hover:text-destructive',
-          style: touchTarget(coarse),
+          style: target,
         }, '×'),
       ),
     );
@@ -464,11 +469,13 @@ export function HistoryList(props: HistoryListProps) {
     );
 
   const previewing = activeEntry && (historyLine(activeEntry.value).extraLines > 0 || activeEntry.value.length > 60);
+  const descendant = activeEntry ? cellId(activeEntry) : undefined;
 
   return h('div', {
     ref,
     id,
     popover: 'auto',
+    role: 'dialog',
     'aria-label': `${label} history`,
     'data-role': 'history-list',
     className: 'z-50 flex flex-col gap-1 overflow-hidden rounded-md border bg-popover p-1 text-sm text-popover-foreground shadow-md',
@@ -481,54 +488,55 @@ export function HistoryList(props: HistoryListProps) {
       'aria-autocomplete': 'list',
       'aria-expanded': true,
       'aria-controls': `${id}-grid`,
-      'aria-activedescendant': activeEntry ? rowId(activeEntry) : undefined,
+      'aria-activedescendant': descendant,
       'aria-label': `Filter ${label} history`,
       placeholder: 'Filter',
       value: query,
       onChange: (e: React.ChangeEvent<HTMLInputElement>) => { setQuery(e.target.value); setActive(0); },
       'data-role': 'history-filter',
       className: 'w-full rounded border px-2 py-1',
-      style: coarse ? { minHeight: HISTORY_TOUCH_TARGET_PX, fontSize: 16 } : undefined,
+      style: coarse ? { minHeight: minTarget, fontSize: 16 } : undefined,
     }),
     h('div', {
       ref: gridRef,
       id: `${id}-grid`,
       role: 'grid',
       'aria-label': `${label} history`,
-      'aria-activedescendant': !showFilter && activeEntry ? rowId(activeEntry) : undefined,
+      'aria-activedescendant': !showFilter ? descendant : undefined,
       tabIndex: showFilter ? -1 : 0,
       className: 'max-h-72 overflow-y-auto outline-none',
     },
       group('Pinned', pinned, 0),
       group('Recent', recent, pinned.length),
     ),
-    shown.length === 0 && !cleared && h('p', { className: 'px-2 py-1.5 text-muted-foreground', 'data-role': 'history-empty' }, needle ? 'No match' : 'No history'),
+    shown.length === 0 && !onUndo && h('p', { className: 'px-2 py-1.5 text-muted-foreground', 'data-role': 'history-empty' }, needle ? 'No match' : 'No history'),
+    error && h('p', { role: 'alert', 'data-role': 'history-error', className: 'px-2 py-1 text-xs text-destructive' }, error),
     previewing && h('pre', {
       'data-role': 'history-preview',
       'aria-label': 'Full value',
       className: 'max-h-40 overflow-auto whitespace-pre-wrap rounded bg-muted p-2 font-sans text-xs',
     }, activeEntry!.value),
     h('div', { className: 'flex items-center justify-between gap-2 border-t pt-1' },
-      cleared
+      onUndo
         ? h(React.Fragment, null,
           h('span', { role: 'status', className: 'px-1 text-xs text-muted-foreground' }, 'History cleared.'),
           h(RowButton, {
-            onPress: () => { onRestore(cleared); setCleared(null); },
+            onPress: onUndo,
             'data-role': 'history-undo',
             className: 'rounded px-2 py-1 text-xs font-medium',
-            style: touchTarget(coarse),
+            style: target,
           }, 'Undo'))
         : entries.length > 0 && h(RowButton, {
-          onPress: clearAll,
+          onPress: onClear,
           'data-role': 'history-clear',
           className: 'ml-auto rounded px-2 py-1 text-xs text-muted-foreground hover:text-destructive',
-          style: touchTarget(coarse),
+          style: target,
         }, 'Clear history'),
     ),
   );
 }
 
-/** A button inside the list, with press feedback (`usePress`); it never takes the list's focus from the keyboard. */
+/** A button inside the list, with press feedback (`usePress`). */
 function RowButton({ onPress, children, className, ...rest }: {
   onPress: () => unknown;
   children?: React.ReactNode;
@@ -557,17 +565,25 @@ export interface FieldHistoryProps {
   /** The field element: Alt+ArrowDown on it opens the list, and focus returns to it after a pick. */
   fieldRef: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>;
   className?: string;
+  /** The smallest target under a coarse pointer, in px. Default: {@link HISTORY_TOUCH_TARGET_PX}. */
+  minTarget?: number;
 }
-
-let nextListId = 0;
 
 /** A click on the button this soon after a light dismiss is the same gesture: it does not reopen. */
 const REOPEN_GUARD_MS = 400;
 
+/** A failure as one line for the list. */
+function failureText(error: unknown, doing: string): string {
+  const reason = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  return `Could not ${doing}${reason ? `: ${reason}` : ''}.`;
+}
+
 /**
  * The history button and list for one field. Picking an entry records the field's current value
  * (reason `'pick'`, so a pick never loses anything), replaces the value, closes the list and
- * returns focus to the field with the caret at the end. Alt+ArrowDown on the field opens it.
+ * returns focus to the field with the caret at the end; if the store refuses, the value is kept
+ * and the list says why. Alt+ArrowDown on the field opens the list. "Clear history" clears at
+ * once and offers Undo for {@link HISTORY_UNDO_MS}, even if the list is closed and reopened.
  *
  * @example
  * ```tsx
@@ -577,34 +593,50 @@ const REOPEN_GUARD_MS = 400;
  *   value={value} onChange={setValue} fieldRef={ref} />
  * ```
  */
-export function FieldHistory({ history, config, label, value, onChange, fieldRef, className }: FieldHistoryProps) {
+export function FieldHistory({ history, config, label, value, onChange, fieldRef, className, minTarget }: FieldHistoryProps) {
   const state = useFieldHistory(history, config?.scope, { max: config?.max });
   const [open, setOpen] = React.useState(false);
-  const [listId] = React.useState(() => `zodal-history-${++nextListId}`);
+  const [error, setError] = React.useState<string | undefined>(undefined);
+  // What a clear removed, offered back until Undo succeeds or HISTORY_UNDO_MS passes.
+  const [cleared, setCleared] = React.useState<readonly HistoryEntry[] | null>(null);
+  const listId = `zodal-history-${React.useId().replace(/:/g, '')}`;
   const buttonRef = React.useRef<HTMLButtonElement>(null);
   // A light dismiss closes the list on the pointerdown that precedes the button's click: that
   // click must not open it again.
   const dismissedAt = React.useRef(-Infinity);
-  const latest = React.useRef({ count: state.entries.length });
-  latest.current = { count: state.entries.length };
+  const offered = state.entries.length + (cleared ? 1 : 0);
+  const latest = React.useRef({ offered });
+  latest.current = { offered };
 
-  // Alt+ArrowDown on the field opens the list (the APG combobox convention).
+  React.useEffect(() => {
+    if (!cleared) return;
+    const t = setTimeout(() => setCleared(null), HISTORY_UNDO_MS);
+    return () => clearTimeout(t);
+  }, [cleared]);
+
+  // Alt+ArrowDown on the field opens the list (the APG combobox convention). Re-bound whenever the
+  // field element changes (an input swapped for a textarea).
+  const bound = React.useRef<HTMLElement | null>(null);
   React.useEffect(() => {
     const field: HTMLElement | null = fieldRef.current;
+    if (field === bound.current) return;
+    bound.current = field;
     if (!field) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.altKey && e.key === 'ArrowDown' && latest.current.count > 0) {
+      if (e.altKey && e.key === 'ArrowDown' && latest.current.offered > 0) {
         e.preventDefault();
         setOpen(true);
       }
     };
     field.addEventListener('keydown', onKey);
-    return () => field.removeEventListener('keydown', onKey);
-  }, [fieldRef]);
+    return () => {
+      field.removeEventListener('keydown', onKey);
+      bound.current = null;
+    };
+  });
 
   if (!history || !config) return null;
 
-  const close = () => setOpen(false);
   const focusField = () => {
     const field = fieldRef.current;
     if (!field) return;
@@ -612,10 +644,24 @@ export function FieldHistory({ history, config, label, value, onChange, fieldRef
     const end = field.value.length;
     try { field.setSelectionRange(end, end); } catch { /* not a text control */ }
   };
+  /** Run a store action; a failure is shown in the list (kept open) instead of lost. */
+  const attempt = async (doing: string, action: () => Promise<unknown>): Promise<boolean> => {
+    try {
+      await action();
+      setError(undefined);
+      return true;
+    } catch (err) {
+      setError(failureText(err, doing));
+      return false;
+    }
+  };
   const pick = async (entry: HistoryEntry) => {
-    const current = typeof value === 'string' ? value.trim() : '';
-    if (current && current !== entry.value) await state.record(current, 'pick');
-    await state.record(entry.value, 'pick'); // the picked value moves to the top
+    const ok = await attempt('remember the current value', async () => {
+      const typed = typeof value === 'string' ? value.trim() : '';
+      if (typed && typed !== entry.value) await state.record(typed, 'pick');
+      await state.record(entry.value, 'pick'); // the picked value moves to the top
+    });
+    if (!ok) return; // the field keeps its value: nothing typed is lost
     onChange(entry.value);
     setOpen(false);
     // After the field has the new value, so the caret lands at its end.
@@ -625,7 +671,7 @@ export function FieldHistory({ history, config, label, value, onChange, fieldRef
   return h('span', { className: `inline-flex ${className ?? ''}`.trim(), 'data-role': 'field-history' },
     h(HistoryButton, {
       label,
-      count: state.entries.length,
+      count: offered,
       expanded: open,
       controls: listId,
       onToggle: () => {
@@ -633,19 +679,31 @@ export function FieldHistory({ history, config, label, value, onChange, fieldRef
         setOpen(!open);
       },
       buttonRef,
+      minTarget,
     }),
     open && h(HistoryList, {
       id: listId,
       label,
       entries: state.entries,
       anchor: buttonRef.current,
+      minTarget,
+      error,
       onPick: (entry) => void pick(entry),
-      onRemove: (entry) => void state.remove(entry),
-      onPin: (entry, pinned) => void state.pin(entry, pinned),
-      onClear: () => state.clear(),
-      onRestore: (entries) => void state.restore(entries),
+      onRemove: (entry) => void attempt('remove it', () => state.remove(entry)),
+      onPin: (entry, pinned) => void attempt(pinned ? 'pin it' : 'unpin it', () => state.pin(entry, pinned)),
+      onClear: () => void attempt('clear the history', async () => {
+        const removed = await state.clear();
+        if (removed.length) setCleared(removed);
+      }),
+      onUndo: cleared
+        ? () => void attempt('restore the history', async () => {
+          await state.restore(cleared);
+          setCleared(null); // only once it is back
+        })
+        : undefined,
       onClose: (reason) => {
-        close();
+        setOpen(false);
+        setError(undefined);
         if (reason === 'escape') focusField();
         else dismissedAt.current = performance.now();
       },

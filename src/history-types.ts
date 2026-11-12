@@ -4,7 +4,7 @@
  * carries a {@link ResolvedFieldHistory} as `history`. The `@zodal/ui` on npm this package builds
  * against predates both (i2mint/zodal#23), so they are declared here; any object of these shapes
  * works. Once a `@zodal/ui` with `RendererContext.history` is published, these become re-exports of
- * its types (same names). Design: i2mint/zodal `docs/research/field-input-history.md`.
+ * its types (same names; they are declared in `@zodal/core`). Design: i2mint/zodal `docs/research/field-input-history.md`.
  */
 
 /** One remembered value of one history scope. */
@@ -35,7 +35,7 @@ export interface FieldHistoryStore {
   clear(scope?: string): Promise<HistoryEntry[]>;
   /** Put entries back (the Undo of `clear` or `remove`). */
   restore(entries: readonly HistoryEntry[]): Promise<void>;
-  /** Be told when a scope changes (`undefined`: any scope may have), however it changed. Returns the unsubscribe. */
+  /** Be told when a scope changes through this store (`undefined`: any scope may have). Returns the unsubscribe. */
   subscribe?(listener: (scope: string | undefined) => void): () => void;
 }
 

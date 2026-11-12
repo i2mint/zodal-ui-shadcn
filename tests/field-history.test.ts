@@ -164,7 +164,7 @@ describe('HistoryButton', () => {
     const c = mount(h(HistoryButton, { label: 'Lyrics', count: 2, expanded: false, controls: 'l1', onToggle: () => {} }));
     const button = c.querySelector('button')!;
     expect(button.getAttribute('aria-label')).toBe('Lyrics history');
-    expect(button.getAttribute('aria-haspopup')).toBe('grid');
+    expect(button.getAttribute('aria-haspopup')).toBe('dialog');
     expect(button.getAttribute('aria-expanded')).toBe('false');
     expect(button.getAttribute('aria-controls')).toBe('l1');
     expect(button.hasAttribute('data-zodal-press')).toBe(true);
@@ -267,7 +267,7 @@ describe('text and textarea renderers with history', () => {
     expect(document.activeElement).toBe(grid);
     await f.key(grid, 'ArrowDown');
     expect(f.rows()[1].getAttribute('aria-selected')).toBe('true');
-    expect(grid.getAttribute('aria-activedescendant')).toBe(f.rows()[1].id);
+    expect(grid.getAttribute('aria-activedescendant')).toBe(f.rows()[1].querySelector('[role="gridcell"]')!.id);
     await f.key(grid, 'Escape');
     expect(f.list()).toBeNull();
     expect(document.activeElement).toBe(f.field());
@@ -335,12 +335,85 @@ describe('text and textarea renderers with history', () => {
     await f.click(f.list()!.querySelector('[data-role="history-clear"]')!);
     await settle();
     expect(all().map((e) => e.value)).toEqual(['kept']);
-    expect(f.button()).toBeNull();
+    expect(f.button()).not.toBeNull(); // kept while Undo is offered
     const undo = f.list()!.querySelector('[data-role="history-undo"]')!;
     expect(f.list()!.textContent).toContain('History cleared.');
     await f.click(undo);
     await settle();
     expect(all().map((e) => e.value).sort()).toEqual(['a', 'b', 'kept']);
     expect(f.button()).not.toBeNull();
+  });
+});
+
+describe('review fixes', () => {
+  it('TextareaInput takes only free text: a notes list, a description enum, a summary number keep their own renderers', () => {
+    const registry = createShadcnRegistry();
+    const resolveName = (zodType: string, extra: object = {}) =>
+      registry.explain({ zodType, editWidget: 'textarea', editable: true, visible: true, title: 'X', ...extra } as unknown as ResolvedFieldAffordance, { mode: 'form' })
+        .filter((r: any) => r.score > 0).sort((a: any, b: any) => b.score - a.score)[0]?.name;
+    expect(resolveName('string')).toBe('TextareaInput');
+    expect(resolveName('array')).not.toBe('TextareaInput');
+    expect(resolveName('number')).toBe('NumberInput');
+    expect(resolveName('enum')).toBe('SelectInput');
+    expect(resolveName('string', { storageRole: 'content' })).not.toBe('TextareaInput');
+  });
+
+  it('Enter on the Clear history button clears; it does not pick', async () => {
+    const { store, all } = fakeStore([['lyrics', 'a']]);
+    const f = mountField(store, 'typed');
+    await settle();
+    await f.click(f.button()!);
+    const clear = f.list()!.querySelector('[data-role="history-clear"]')!;
+    await f.key(clear, 'Enter');
+    expect(f.written).toEqual([]);
+    await f.click(clear);
+    await settle();
+    expect(all()).toEqual([]);
+  });
+
+  it('pin and remove are reachable with Tab', async () => {
+    const { store } = fakeStore([['lyrics', 'a']]);
+    const f = mountField(store, '');
+    await settle();
+    await f.click(f.button()!);
+    expect(f.rows()[0].querySelector('[data-role="history-pin"]')!.getAttribute('tabindex')).toBeNull();
+    expect(f.rows()[0].querySelector('[data-role="history-remove"]')!.getAttribute('tabindex')).toBeNull();
+  });
+
+  it('Undo survives the list closing: the button stays while it is offered', async () => {
+    const { store, all } = fakeStore([['lyrics', 'a']]);
+    const f = mountField(store, '');
+    await settle();
+    await f.click(f.button()!);
+    await f.click(f.list()!.querySelector('[data-role="history-clear"]')!);
+    await settle();
+    await f.key(f.list()!, 'Escape');
+    expect(f.list()).toBeNull();
+    expect(f.button()).not.toBeNull();
+    await f.click(f.button()!);
+    await f.click(f.list()!.querySelector('[data-role="history-undo"]')!);
+    await settle();
+    expect(all().map((e) => e.value)).toEqual(['a']);
+  });
+
+  it('a pick the store refuses keeps the value and says why, with the list open', async () => {
+    const { store } = fakeStore([['lyrics', 'old']]);
+    store.record = async () => { throw new Error('quota exceeded'); };
+    const f = mountField(store, 'typed');
+    await settle();
+    await f.click(f.button()!);
+    await f.click(f.rows()[0].querySelector('[data-role="history-pick"]')!);
+    await settle();
+    expect(f.written).toEqual([]);
+    expect(f.field().value).toBe('typed');
+    expect(f.list()!.querySelector('[role="alert"]')!.textContent).toContain('quota exceeded');
+  });
+
+  it('minTarget sets the touch target size', () => {
+    vi.spyOn(window, 'matchMedia' as any).mockImplementation(((q: string) => ({
+      matches: q === '(pointer: coarse)', media: q, addEventListener() {}, removeEventListener() {},
+    })) as any);
+    const c = mount(h(HistoryButton, { label: 'Lyrics', count: 1, expanded: false, onToggle: () => {}, minTarget: 48 }));
+    expect(c.querySelector('button')!.style.minHeight).toBe('48px');
   });
 });

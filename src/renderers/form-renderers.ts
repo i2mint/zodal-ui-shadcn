@@ -294,9 +294,11 @@ export const formRenderers: RendererEntry<React.ComponentType<FormFieldProps>>[]
     renderer: TextInput,
     name: 'TextInput',
   },
-  // editWidget: 'textarea' (multi-line text: `description`, `notes`... or declared), above the plain text input
+  // editWidget: 'textarea' on a string (multi-line text: `description`, `notes`... or declared), above the plain text input
   {
-    tester: (field, ctx) => ctx.mode === 'form' && field.editWidget === 'textarea' ? PRIORITY.LIBRARY : -1,
+    // Only free text: the name heuristic also marks a `notes` array or a `description` enum 'textarea'.
+    tester: (field, ctx) =>
+      ctx.mode === 'form' && field.editWidget === 'textarea' && field.zodType === 'string' && field.storageRole !== 'content' ? PRIORITY.LIBRARY : -1,
     renderer: TextareaInput,
     name: 'TextareaInput',
   },
