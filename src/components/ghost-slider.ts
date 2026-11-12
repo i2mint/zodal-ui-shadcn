@@ -61,6 +61,12 @@ export interface GhostSliderProps {
   onValueChange?: (value: number) => void;
   /** Called once when a change is done: on release after a drag, and per key press. */
   onValueCommit?: (value: number) => void;
+  /**
+   * Called once at the end of every pointer gesture, after `onValueCommit` if there was one;
+   * `committed` is false when the gesture ended where it started or was cancelled (a cancel first
+   * reverts the preview through `onValueChange`). A host holding a preview clears it here.
+   */
+  onDragEnd?: (committed: boolean) => void;
   /** Lower bound. Default 0. */
   min?: number;
   /** Upper bound. Default 100. */
@@ -86,13 +92,20 @@ export const SLIDER_TOUCH_SLOP_PX = 6;
 /** A touch this close to the thumb's centre grabs the thumb (half the touch target). */
 const TOUCH_GRAB_PX = SLIDER_TOUCH_TARGET_PX / 2;
 
+/** How many decimals a number is written with (`0.01` → 2, `1e-7` → 7, `2.5e-3` → 4). */
+function decimalsOf(n: number): number {
+  const [mantissa, exp] = String(n).split('e');
+  const places = (mantissa.split('.')[1] ?? '').length - Number(exp ?? 0);
+  return Math.max(0, places);
+}
+
 /** `value` snapped to `min + k * step` and kept in `[min, max]`, without float noise. */
 export function snapToStep(value: number, min: number, max: number, step: number): number {
   const clamped = Math.min(max, Math.max(min, value));
   if (!(step > 0)) return clamped;
-  const decimals = (String(step).split('.')[1] ?? '').length;
+  const digits = Math.max(decimalsOf(step), decimalsOf(min));
   const snapped = min + Math.round((clamped - min) / step) * step;
-  return Number(Math.min(max, Math.max(min, snapped)).toFixed(Math.min(decimals + 2, 20)));
+  return Number(Math.min(max, Math.max(min, snapped)).toFixed(Math.min(digits + 2, 20)));
 }
 
 interface Drag {
@@ -102,6 +115,8 @@ interface Drag {
   onThumb: boolean;
   /** Pointer x minus the grabbed thumb's centre x, so a grab does not jump. */
   grab: number;
+  /** The pointer's last x (a lostpointercapture may carry no coordinates). */
+  lastX: number;
   moved: boolean;
   from: number;
   value: number;
@@ -112,6 +127,7 @@ export function GhostSlider({
   value,
   onValueChange,
   onValueCommit,
+  onDragEnd,
   min = 0,
   max = 100,
   step = 1,
@@ -126,8 +142,8 @@ export function GhostSlider({
   const [drag, setDrag] = React.useState<Drag | null>(null);
   const dragRef = React.useRef<Drag | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
-  const latest = React.useRef({ onValueChange, onValueCommit });
-  latest.current = { onValueChange, onValueCommit };
+  const latest = React.useRef({ onValueChange, onValueCommit, onDragEnd });
+  latest.current = { onValueChange, onValueCommit, onDragEnd };
 
   // Keys and assistive technology move the native input, which fires `change` once per press:
   // that is the commit. (Pointers never reach the input: they are handled below.)
@@ -165,6 +181,8 @@ export function GhostSlider({
     if (emit !== undefined && emit !== before) latest.current.onValueChange?.(emit);
   };
 
+  const focusInput = () => inputRef.current?.focus({ preventScroll: true });
+
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (disabled || dragRef.current || (e.pointerType === 'mouse' && e.button !== 0)) return;
     const { centreX, valueAtX } = geometry();
@@ -177,22 +195,27 @@ export function GhostSlider({
       /* a pointer the browser no longer tracks: moves still arrive while it is over the track */
     }
     const next: Drag = {
-      pointerId: e.pointerId, touch, startX: e.clientX, onThumb, grab: onThumb ? offset : 0,
+      pointerId: e.pointerId, touch, startX: e.clientX, lastX: e.clientX, onThumb, grab: onThumb ? offset : 0,
       moved: false, from: value, value,
     };
     // A mouse press on the track moves the thumb there at once; a touch waits (scroll or tap?).
     if (!touch && !onThumb) Object.assign(next, { moved: true, value: valueAtX(e.clientX) });
     update(next, next.value);
-    inputRef.current?.focus({ preventScroll: true });
-    if (!touch) e.preventDefault();
+    // A touch may still turn out to be a scroll: focus (and so blur a text field, closing the
+    // on-screen keyboard) only once it drags or taps.
+    if (!touch) {
+      focusInput();
+      e.preventDefault();
+    }
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const d = dragRef.current;
     if (!d || e.pointerId !== d.pointerId) return;
     if (!d.moved && Math.abs(e.clientX - d.startX) < (d.touch ? SLIDER_TOUCH_SLOP_PX : 1)) return;
+    if (!d.moved && d.touch) focusInput();
     const v = geometry().valueAtX(e.clientX - d.grab);
-    update({ ...d, moved: true, value: v }, v);
+    update({ ...d, moved: true, lastX: e.clientX, value: v }, v);
   };
 
   const finish = (e: React.PointerEvent<HTMLDivElement>, cancelled: boolean) => {
@@ -200,14 +223,20 @@ export function GhostSlider({
     if (!d || e.pointerId !== d.pointerId) return;
     dragRef.current = null; // pointerup and lostpointercapture may both arrive: finish once
     setDrag(null);
+    const { onValueChange: change, onValueCommit: commit, onDragEnd: end } = latest.current;
     if (cancelled) {
-      if (d.value !== d.from) latest.current.onValueChange?.(d.from); // revert the preview
+      if (d.value !== d.from) change?.(d.from); // revert the preview
+      end?.(false);
       return;
     }
+    if (d.touch && !d.moved) focusInput(); // a tap
     // A tap (no drag) on the track moves the thumb there; a tap on the thumb does nothing.
-    const final = !d.moved && !d.onThumb ? geometry().valueAtX(e.clientX) : d.value;
-    if (final !== d.value) latest.current.onValueChange?.(final);
-    if (final !== d.from) latest.current.onValueCommit?.(final);
+    // The x is the pointerup's, else the last one seen (lostpointercapture may carry none).
+    const x = e.type === 'pointerup' ? e.clientX : d.lastX;
+    const final = !d.moved && !d.onThumb ? geometry().valueAtX(x) : d.value;
+    if (final !== d.value) change?.(final);
+    if (final !== d.from) commit?.(final);
+    end?.(final !== d.from);
   };
 
   const ghost = drag === null ? null : (savedValue ?? drag.from);

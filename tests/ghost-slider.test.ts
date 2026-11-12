@@ -53,6 +53,8 @@ describe('snapToStep', () => {
     expect(snapToStep(-3, 0, 10, 1)).toBe(0);
     expect(snapToStep(12, 0, 10, 3)).toBe(9);
     expect(snapToStep(1.2345, 0, 2, 0)).toBe(1.2345);
+    expect(snapToStep(0.12345, 0.00001, 1, 0.1)).toBe(0.10001); // min's decimals count too
+    expect(snapToStep(3.3e-7, 0, 1, 1e-7)).toBe(3e-7); // a step written in exponent form
   });
 });
 
@@ -154,6 +156,36 @@ describe('GhostSlider', () => {
     pointer(d.area, 'pointerdown', 188, 'mouse');
     expect(onValueChange).not.toHaveBeenCalled();
     expect(ghost(c)).toBeNull();
+  });
+
+  it('ends every gesture with onDragEnd: after a commit, or uncommitted when it came back or was cancelled', () => {
+    const log: string[] = [];
+    const c = mount(React.createElement(Host, {
+      value: 30,
+      onCommit: (v) => log.push(`commit ${v}`),
+      onDragEnd: (done: boolean) => log.push(`end ${done}`),
+    } as any));
+    const { area } = layOut(c);
+    pointer(area, 'pointerdown', 68);
+    pointer(area, 'pointermove', 128);
+    pointer(area, 'pointerup', 128);
+    pointer(area, 'pointerdown', 128);
+    pointer(area, 'pointermove', 168);
+    pointer(area, 'pointermove', 128); // back where it started
+    pointer(area, 'pointerup', 128);
+    pointer(area, 'pointerdown', 128);
+    pointer(area, 'pointermove', 168);
+    pointer(area, 'pointercancel', 168);
+    expect(log).toEqual(['commit 60', 'end true', 'end false', 'end false']);
+  });
+
+  it('a touch does not take focus until it drags or taps (it may be a scroll)', () => {
+    const c = mount(React.createElement(Host, { value: 30 }));
+    const { area, input } = layOut(c);
+    pointer(area, 'pointerdown', 68);
+    expect(document.activeElement).not.toBe(input);
+    pointer(area, 'pointermove', 100);
+    expect(document.activeElement).toBe(input);
   });
 
   it('never hands the pointer to the native input, and leaves vertical panning to the page', () => {

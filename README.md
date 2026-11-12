@@ -103,7 +103,7 @@ const settings = defineCollection(z.object({ volume: z.number().min(0).max(11) }
 });
 ```
 
-Bounds and step come from the form config when it carries them (`bounds: { min, max }`, `step`; `toFormConfig` does not project them yet: i2mint/zodal#43), else 0..100 by 1. `GhostSlider` is also exported on its own (`value`, `onValueChange`, `onValueCommit`, `min`, `max`, `step`, `savedValue`, `thumbSize`); `thumbSize` must match the thumb's rendered width (16px by default), because a range input insets its thumb by half that width at each end and the ghost is inset the same way. Single value, horizontal, either writing direction, controlled only.
+Bounds and step come from the form config when it carries them (`bounds: { min, max }`, `step`; `toFormConfig` does not project them yet: i2mint/zodal#43), else 0..100 by 1. `GhostSlider` is also exported on its own (`value`, `onValueChange`, `onValueCommit`, `onDragEnd`, `min`, `max`, `step`, `savedValue`, `thumbSize`); `onDragEnd(committed)` ends every pointer gesture, so a host holding a preview clears it there (a drag that came back to its start, or one the browser cancelled, commits nothing); `thumbSize` must match the thumb's rendered width (16px by default), because a range input insets its thumb by half that width at each end and the ghost is inset the same way. Single value, horizontal, either writing direction, controlled only.
 
 `pnpm test:browser` checks the ghost's placement in headless Chromium (needs a Chromium for playwright-core, `npx playwright-core install chromium`); it is not part of `pnpm test`.
 
