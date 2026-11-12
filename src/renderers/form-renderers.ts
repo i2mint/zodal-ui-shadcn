@@ -9,18 +9,64 @@ import { PRIORITY } from '@zodal/ui';
 import type { RendererEntry } from '@zodal/ui';
 import type { FormFieldProps } from '../types.js';
 import { GhostSlider } from '../components/ghost-slider.js';
+import { FieldHistory } from '../components/field-history.js';
+import { fieldHistoryOf } from '../history-types.js';
 
-function TextInput({ field, config }: FormFieldProps) {
+/** The history control for a text field, when the context has a store and the config asks for history. */
+function historyFor(props: FormFieldProps, fieldRef: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>) {
+  const { field, config, context } = props;
+  const history = fieldHistoryOf(config);
+  if (!context?.history || !history || config.disabled) return null;
+  return React.createElement(FieldHistory, {
+    history: context.history,
+    config: history,
+    label: config.label,
+    value: field.value,
+    onChange: (v: string) => field.onChange(v),
+    fieldRef,
+  });
+}
+
+/** A single-line text input; with history, the history button sits at its inline end, outside the box. */
+function TextInput(props: FormFieldProps) {
+  const { field, config } = props;
+  const ref = React.useRef<HTMLInputElement>(null);
+  const history = historyFor(props, ref);
+  const input = React.createElement('input', {
+    ref,
+    id: config.name,
+    type: 'text',
+    value: String(field.value ?? ''),
+    onChange: (e: any) => field.onChange(e.target.value),
+    placeholder: config.placeholder,
+    required: config.required,
+    disabled: config.disabled,
+    className: history ? 'min-w-0 flex-1' : undefined,
+  });
   return React.createElement('div', null,
     React.createElement('label', { htmlFor: config.name }, config.label),
-    React.createElement('input', {
+    history ? React.createElement('div', { className: 'flex items-center gap-1' }, input, history) : input,
+    config.helpText && React.createElement('p', { className: 'text-sm text-muted-foreground' }, config.helpText),
+  );
+}
+
+/** Multi-line text (`editWidget: 'textarea'`); with history, the history button sits at its top-right, outside the box. */
+function TextareaInput(props: FormFieldProps) {
+  const { field, config } = props;
+  const ref = React.useRef<HTMLTextAreaElement>(null);
+  const history = historyFor(props, ref);
+  const label = React.createElement('label', { htmlFor: config.name }, config.label);
+  return React.createElement('div', null,
+    history ? React.createElement('div', { className: 'flex items-end justify-between gap-1' }, label, history) : label,
+    React.createElement('textarea', {
+      ref,
       id: config.name,
-      type: 'text',
       value: String(field.value ?? ''),
       onChange: (e: any) => field.onChange(e.target.value),
       placeholder: config.placeholder,
       required: config.required,
       disabled: config.disabled,
+      className: 'w-full',
     }),
     config.helpText && React.createElement('p', { className: 'text-sm text-muted-foreground' }, config.helpText),
   );
@@ -247,6 +293,14 @@ export const formRenderers: RendererEntry<React.ComponentType<FormFieldProps>>[]
     tester: (field, ctx) => ctx.mode === 'form' && field.zodType === 'string' ? PRIORITY.DEFAULT : -1,
     renderer: TextInput,
     name: 'TextInput',
+  },
+  // editWidget: 'textarea' on a string (multi-line text: `description`, `notes`... or declared), above the plain text input
+  {
+    // Only free text: the name heuristic also marks a `notes` array or a `description` enum 'textarea'.
+    tester: (field, ctx) =>
+      ctx.mode === 'form' && field.editWidget === 'textarea' && field.zodType === 'string' && field.storageRole !== 'content' ? PRIORITY.LIBRARY : -1,
+    renderer: TextareaInput,
+    name: 'TextareaInput',
   },
   // Number
   {
