@@ -2,7 +2,8 @@
 // press the thumb, drag it, and check that the ghost's centre is the thumb's pre-drag centre
 // within 0.5px at min, middle and max, left-to-right and then right-to-left (where the browser
 // mirrors the input and the ghost must mirror with it); then release and check the ghost is gone
-// and exactly one commit fired; then check one commit per arrow-key press.
+// and exactly one commit fired; then drag with a finger (real touch events) and check the thumb
+// lands where the finger was lifted; then check one commit per arrow-key press.
 //
 // Run: pnpm test:browser (needs a Chromium for playwright-core: `npx playwright-core install
 // chromium` once). Not part of `pnpm test`, so CI does not need a browser.
@@ -103,7 +104,43 @@ try {
     check(commits.length === 1, `${dir} at ${start}: one commit per drag (got ${JSON.stringify(commits)})`);
   }
 
+  // A finger (real touch events through CDP): the thumb lands where the finger is lifted, also
+  // when the grab was off the thumb's centre, and also on the way right (the ghost then sits on
+  // the filled part of the track, and must still show).
   await page.evaluate(() => document.getElementById('root').setAttribute('dir', 'ltr'));
+  const cdp = await page.context().newCDPSession(page);
+  const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', {
+    type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, radiusX: 8, radiusY: 8 }],
+  });
+  for (const [start, grabOffset, dx] of [[20, 5, 120], [80, -4, -150], [50, 0, 3]]) {
+    await page.evaluate((v) => window.__set(v), start);
+    const t0 = await thumbCentre();
+    const x0 = t0.x + grabOffset;
+    await touch('touchStart', x0, t0.y);
+    for (let i = 1; i <= 8; i++) await touch('touchMove', x0 + (dx * i) / 8, t0.y);
+    const ghostSeen = dx > 5 ? (await ghost.count()) === 1 : true;
+    await touch('touchEnd');
+    const after = await thumbCentre();
+    const lifted = x0 + dx;
+    if (Math.abs(dx) > 5) {
+      check(Math.abs(after.x + grabOffset - lifted) <= 2, // within one step (3px here) of rounding
+        `touch from ${start}, grabbed ${grabOffset}px off centre, moved ${dx}px: thumb + grab offset at ${(after.x + grabOffset).toFixed(1)}, finger lifted at ${lifted.toFixed(1)}`);
+      check(ghostSeen, `touch from ${start} moving ${dx > 0 ? 'right' : 'left'}: the ghost shows while dragging`);
+    } else {
+      check(Math.abs(after.x - t0.x) <= 0.5, `a touch that moves under the slop does not move the thumb`);
+    }
+    const commits = await page.evaluate(() => window.__commits);
+    check(commits.length === (Math.abs(dx) > 5 ? 1 : 0), `touch from ${start}: ${Math.abs(dx) > 5 ? 'one commit' : 'no commit'} (got ${JSON.stringify(commits)})`);
+  }
+
+  // A tap on the track moves the thumb there.
+  await page.evaluate(() => window.__set(10));
+  const box = await input.boundingBox();
+  await touch('touchStart', box.x + box.width * 0.75, box.y + box.height / 2);
+  await touch('touchEnd');
+  const tapped = await page.evaluate(() => window.__commits);
+  check(tapped.length === 1 && Math.abs(tapped[0] - 75) <= 1, `a tap on the track moves the thumb there (got ${JSON.stringify(tapped)})`);
+
   await page.evaluate(() => window.__set(50));
   await input.focus();
   await page.keyboard.press('ArrowRight');

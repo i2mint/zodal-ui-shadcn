@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { ResolvedFieldAffordance } from '@zodal/core';
-import { GhostSlider, thumbLeft, valuePercent, sliderRange, createShadcnRegistry } from '../src/index.js';
+import { GhostSlider, thumbLeft, valuePercent, snapToStep, sliderRange, createShadcnRegistry, SLIDER_TOUCH_SLOP_PX } from '../src/index.js';
 import type { GhostSliderProps } from '../src/index.js';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -46,31 +46,120 @@ describe('thumbLeft / valuePercent', () => {
   });
 });
 
+describe('snapToStep', () => {
+  it('snaps to min + k * step within the bounds, without float noise', () => {
+    expect(snapToStep(0.30000000000000004, 0, 1, 0.1)).toBe(0.3);
+    expect(snapToStep(7.4, 2, 10, 2)).toBe(8);
+    expect(snapToStep(-3, 0, 10, 1)).toBe(0);
+    expect(snapToStep(12, 0, 10, 3)).toBe(9);
+    expect(snapToStep(1.2345, 0, 2, 0)).toBe(1.2345);
+  });
+});
+
 describe('GhostSlider', () => {
   const ghost = (c: HTMLElement) => c.querySelector('[data-slot="slider-ghost-thumb"]') as HTMLElement | null;
 
-  it('shows a ghost at the pre-drag value while dragging, and drops it on release', () => {
-    const c = mount(slider({ value: 30 }));
+  /** A track 216px wide at x = 0, so with a 16px thumb x = 8 is the minimum and x = 208 the maximum. */
+  function layOut(c: HTMLElement) {
     const input = c.querySelector('input')!;
+    input.getBoundingClientRect = () => ({ left: 0, right: 216, width: 216, top: 0, bottom: 16, height: 16, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    return { input, area: c.querySelector('[data-slot="slider"]') as HTMLElement };
+  }
+  function pointer(el: HTMLElement, type: string, clientX: number, pointerType = 'touch') {
+    const e = new MouseEvent(type, { bubbles: true, cancelable: true, clientX, button: 0 });
+    Object.defineProperties(e, { pointerId: { value: 1 }, pointerType: { value: pointerType } });
+    act(() => el.dispatchEvent(e));
+  }
+  /** A host that keeps the value, like the real one: previews move the thumb. */
+  function Host({ onCommit, onChange, ...props }: Partial<GhostSliderProps> & { onCommit?: (v: number) => void; onChange?: (v: number) => void }) {
+    const [v, set] = React.useState(props.value ?? 30);
+    return React.createElement(GhostSlider, {
+      ...props,
+      value: v,
+      onValueChange: (x: number) => (set(x), onChange?.(x)),
+      onValueCommit: onCommit,
+    });
+  }
+
+  it('shows a ghost at the pre-drag value while dragging, and drops it on release', () => {
+    const c = mount(React.createElement(Host, { value: 30 }));
+    const { area } = layOut(c);
     expect(ghost(c)).toBeNull();
-    act(() => input.dispatchEvent(new Event('pointerdown', { bubbles: true })));
+    pointer(area, 'pointerdown', 68); // the thumb at 30 is centred at 8 + 0.3 * 200 = 68
     expect(ghost(c)).toBeNull(); // not moved yet: the ghost would sit under the thumb
-    rerender(slider({ value: 60 }));
+    pointer(area, 'pointermove', 128);
     expect(ghost(c)?.style.insetInlineStart).toBe(thumbLeft(30));
-    act(() => window.dispatchEvent(new Event('pointerup')));
+    pointer(area, 'pointerup', 128);
     expect(ghost(c)).toBeNull();
   });
 
-  it('puts the ghost at an explicit savedValue, and never on a disabled slider', () => {
-    const c = mount(slider({ value: 30, savedValue: 10 }));
-    act(() => c.querySelector('input')!.dispatchEvent(new Event('pointerdown', { bubbles: true })));
-    rerender(slider({ value: 40, savedValue: 10 }));
+  it('lands where the pointer is lifted: the grabbed thumb follows it 1:1, without a jump', () => {
+    const changes: number[] = [];
+    const commits: number[] = [];
+    const c = mount(React.createElement(Host, { value: 30, onChange: (v) => changes.push(v), onCommit: (v) => commits.push(v) }));
+    const { area, input } = layOut(c);
+    pointer(area, 'pointerdown', 74); // 6px right of the thumb's centre
+    expect(changes).toEqual([]); // grabbing does not move it
+    pointer(area, 'pointermove', 74 + SLIDER_TOUCH_SLOP_PX + 34); // 40px right: 20 units
+    expect(input.value).toBe('50');
+    pointer(area, 'pointermove', 174);
+    pointer(area, 'pointerup', 174);
+    expect(input.value).toBe('80');
+    expect(commits).toEqual([80]);
+  });
+
+  it('moves the thumb to a tap on the track, and does nothing for a tap on the thumb', () => {
+    const commits: number[] = [];
+    const c = mount(React.createElement(Host, { value: 30, onCommit: (v) => commits.push(v) }));
+    const { area, input } = layOut(c);
+    pointer(area, 'pointerdown', 70);
+    pointer(area, 'pointerup', 70);
+    expect(commits).toEqual([]);
+    pointer(area, 'pointerdown', 188);
+    pointer(area, 'pointerup', 188);
+    expect([input.value, commits]).toEqual(['90', [90]]);
+  });
+
+  it('a touch smaller than the slop is not a drag, and a cancelled drag reverts', () => {
+    const commits: number[] = [];
+    const c = mount(React.createElement(Host, { value: 30, onCommit: (v) => commits.push(v) }));
+    const { area, input } = layOut(c);
+    pointer(area, 'pointerdown', 68);
+    pointer(area, 'pointermove', 68 + SLIDER_TOUCH_SLOP_PX - 1);
+    expect(input.value).toBe('30');
+    pointer(area, 'pointermove', 148);
+    expect(input.value).toBe('70');
+    pointer(area, 'pointercancel', 148); // the browser took the gesture (a scroll, a system swipe)
+    expect([input.value, commits, ghost(c)]).toEqual(['30', [], null]);
+  });
+
+  it('a mouse press on the track moves the thumb there at once', () => {
+    const c = mount(React.createElement(Host, { value: 30 }));
+    const { area, input } = layOut(c);
+    pointer(area, 'pointerdown', 108, 'mouse');
+    expect(input.value).toBe('50');
+    expect(ghost(c)?.style.insetInlineStart).toBe(thumbLeft(30));
+  });
+
+  it('puts the ghost at an explicit savedValue, and never reacts on a disabled slider', () => {
+    const c = mount(React.createElement(Host, { value: 30, savedValue: 10 }));
+    const { area } = layOut(c);
+    pointer(area, 'pointerdown', 68);
+    pointer(area, 'pointermove', 108);
     expect(ghost(c)?.style.insetInlineStart).toBe(thumbLeft(10));
-    act(() => window.dispatchEvent(new Event('pointercancel')));
-    rerender(slider({ value: 30, disabled: true }));
-    act(() => c.querySelector('input')!.dispatchEvent(new Event('pointerdown', { bubbles: true })));
-    rerender(slider({ value: 50, disabled: true }));
+    pointer(area, 'pointerup', 108);
+    const onValueChange = vi.fn();
+    rerender(slider({ value: 30, disabled: true, onValueChange }));
+    const d = layOut(c);
+    pointer(d.area, 'pointerdown', 188, 'mouse');
+    expect(onValueChange).not.toHaveBeenCalled();
     expect(ghost(c)).toBeNull();
+  });
+
+  it('never hands the pointer to the native input, and leaves vertical panning to the page', () => {
+    const c = mount(slider());
+    expect(c.querySelector('input')!.style.pointerEvents).toBe('none');
+    expect((c.querySelector('[data-slot="slider"]') as HTMLElement).style.touchAction).toBe('pan-y');
   });
 
   it('reports every move through onValueChange and the end of a change through onValueCommit', () => {
