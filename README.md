@@ -95,7 +95,7 @@ The `ViewConfig` type is declared here structurally (`src/view-types.ts`) and `g
 
 ## Slider with a ghost thumb
 
-A number field declared with `editWidget: 'slider'` renders as `GhostSlider`: a range input that, while the person drags, leaves a faded ghost thumb at the saved value (the value at pointer-down, or `savedValue`) so they can see how far they moved; it disappears on release. A readout shows the live value; the form value is written on commit (release, or each key press), not on every move.
+A number field declared with `editWidget: 'slider'` renders as `GhostSlider`: a range input that, while the person drags, leaves a ghost thumb at the saved value (the value at pointer-down, or `savedValue`) so they can see how far they moved; it disappears on release. The pointer is handled by the slider itself, not by the browser, so on a phone the thumb stays under the finger and lands where the finger is lifted: a press on the thumb grabs it without a jump, a tap on the track moves the thumb there, a touch only drags once it has moved a few pixels sideways (a vertical swipe still scrolls the page), and the touch area is 44px tall. The ghost is a light ring with a dark outline, visible on the filled and the empty part of the track (`--zodal-slider-ghost-ring`, `--zodal-slider-ghost-outline`, `--zodal-slider-ghost-fill` restyle it). A readout shows the live value; the form value is written on commit (release, or each key press), not on every move.
 
 ```typescript
 const settings = defineCollection(z.object({ volume: z.number().min(0).max(11) }), {
@@ -103,7 +103,7 @@ const settings = defineCollection(z.object({ volume: z.number().min(0).max(11) }
 });
 ```
 
-Bounds and step come from the form config when it carries them (`bounds: { min, max }`, `step`; `toFormConfig` does not project them yet: i2mint/zodal#43), else 0..100 by 1. `GhostSlider` is also exported on its own (`value`, `onValueChange`, `onValueCommit`, `min`, `max`, `step`, `savedValue`, `thumbSize`); `thumbSize` must match the thumb's rendered width (16px by default), because a range input insets its thumb by half that width at each end and the ghost is inset the same way. Single value, horizontal, left-to-right, controlled only.
+Bounds and step come from the form config when it carries them (`bounds: { min, max }`, `step`; `toFormConfig` does not project them yet: i2mint/zodal#43), else 0..100 by 1. `GhostSlider` is also exported on its own (`value`, `onValueChange`, `onValueCommit`, `onDragEnd`, `min`, `max`, `step`, `savedValue`, `thumbSize`); `onDragEnd(committed)` ends every pointer gesture, so a host holding a preview clears it there (a drag that came back to its start, or one the browser cancelled, commits nothing); `thumbSize` must match the thumb's rendered width (16px by default), because a range input insets its thumb by half that width at each end and the ghost is inset the same way. Single value, horizontal, either writing direction, controlled only.
 
 `pnpm test:browser` checks the ghost's placement in headless Chromium (needs a Chromium for playwright-core, `npx playwright-core install chromium`); it is not part of `pnpm test`.
 

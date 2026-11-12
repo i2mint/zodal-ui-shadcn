@@ -66,6 +66,9 @@ export interface GhostRangeSliderProps {
   onValueChange?: (value: RangeValue) => void;
   /** Once per gesture that changed the value: release, track tap, key press. */
   onValueCommit?: (value: RangeValue) => void;
+  /** Called once at the end of every pointer gesture, after `onValueCommit` if there was one;
+   * `committed` is false when it ended where it started or was cancelled. As on GhostSlider. */
+  onDragEnd?: (committed: boolean) => void;
   /** Snap a raw value (e.g. `Math.round` for years). Default: identity. */
   round?: (value: number) => number;
   /** Text for a value: tick labels, `aria-valuetext`. Default: a locale number, 2 decimals at most. */
@@ -183,6 +186,7 @@ export function GhostRangeSlider({
   scale,
   onValueChange,
   onValueCommit,
+  onDragEnd,
   round = (v) => v,
   format = defaultFormat,
   openEnds = true,
@@ -240,6 +244,9 @@ export function GhostRangeSlider({
     return { value: withSide(base, side, sideValueAt(side, at, scale, opts)), at };
   };
 
+  const focusThumb = (side: Side) =>
+    (areaRef.current?.querySelectorAll('[role=slider]')[side] as HTMLElement | undefined)?.focus({ preventScroll: true });
+
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (disabled || dragRef.current || (e.pointerType === 'mouse' && e.button !== 0)) return;
     const p = positionAt(e.clientX);
@@ -266,7 +273,9 @@ export function GhostRangeSlider({
       Object.assign(next, placed(value, side, p, pos), { moved: true });
     }
     update(next);
-    if (side !== null) (areaRef.current?.querySelectorAll('[role=slider]')[side] as HTMLElement | undefined)?.focus({ preventScroll: true });
+    // A touch may still turn out to be a scroll: focus (and so blur a text field, closing the
+    // on-screen keyboard) only once it drags or taps.
+    if (!touch && side !== null) focusThumb(side);
     if (!touch) e.preventDefault();
   };
 
@@ -276,6 +285,7 @@ export function GhostRangeSlider({
     const dx = e.clientX - d.startX;
     if (!d.moved && Math.abs(dx) < (d.touch ? TOUCH_SLOP_PX : 1)) return;
     const side: Side = d.side ?? (dx < 0 ? 0 : 1);
+    if (!d.moved && d.touch) focusThumb(side);
     const p = positionAt(e.clientX) - d.grab;
     update({ ...d, side, moved: true, ...placed(d.from, side, clamp01(p), d.fromPos) });
   };
@@ -287,15 +297,18 @@ export function GhostRangeSlider({
     setDrag(null);
     if (cancelled) {
       if (!sameRange(d.value, d.from)) onValueChange?.(d.from); // revert the preview
+      onDragEnd?.(false);
       return;
     }
     let final = d.value;
     // A tap (no drag) on the track moves the nearer thumb there; a tap on a thumb does nothing.
+    if (d.touch && !d.moved && d.side !== null) focusThumb(d.side); // a tap
     if (!d.moved && !d.onThumb && d.side !== null) final = placed(d.from, d.side, positionAt(e.clientX), d.fromPos).value;
     if (!sameRange(final, d.from)) {
       if (!sameRange(final, d.value)) onValueChange?.(final);
       onValueCommit?.(final);
     }
+    onDragEnd?.(!sameRange(final, d.from));
   };
 
   const onKeyDown = (side: Side) => (e: React.KeyboardEvent<HTMLDivElement>) => {
