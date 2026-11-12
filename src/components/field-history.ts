@@ -614,13 +614,11 @@ export function FieldHistory({ history, config, label, value, onChange, fieldRef
     return () => clearTimeout(t);
   }, [cleared]);
 
-  // Alt+ArrowDown on the field opens the list (the APG combobox convention). Re-bound whenever the
+  // Alt+ArrowDown on the field opens the list (the APG combobox convention). Re-bound when the
   // field element changes (an input swapped for a textarea).
-  const bound = React.useRef<HTMLElement | null>(null);
+  const fieldElement: HTMLElement | null = fieldRef.current;
   React.useEffect(() => {
     const field: HTMLElement | null = fieldRef.current;
-    if (field === bound.current) return;
-    bound.current = field;
     if (!field) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.altKey && e.key === 'ArrowDown' && latest.current.offered > 0) {
@@ -629,11 +627,8 @@ export function FieldHistory({ history, config, label, value, onChange, fieldRef
       }
     };
     field.addEventListener('keydown', onKey);
-    return () => {
-      field.removeEventListener('keydown', onKey);
-      bound.current = null;
-    };
-  });
+    return () => field.removeEventListener('keydown', onKey);
+  }, [fieldRef, fieldElement]);
 
   if (!history || !config) return null;
 
