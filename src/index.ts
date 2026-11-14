@@ -1,6 +1,7 @@
 export { createShadcnRegistry } from './registry.js';
 export { cellRenderers } from './renderers/cell-renderers.js';
 export { formRenderers } from './renderers/form-renderers.js';
+export { cellLabel } from './renderers/cell-renderers.js';
 export { filterRenderers } from './renderers/filter-renderers.js';
 export { optionsFormRenderers } from './renderers/options-form-renderers.js';
 export type { OptionsFieldProps } from './renderers/options-form-renderers.js';
