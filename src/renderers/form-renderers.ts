@@ -11,6 +11,7 @@ import type { FormFieldProps } from '../types.js';
 import { GhostSlider } from '../components/ghost-slider.js';
 import { FieldHistory } from '../components/field-history.js';
 import { fieldHistoryOf } from '../history-types.js';
+import { TagInput } from './tag-renderers.js';
 
 /** The history control for a text field, when the context has a store and the config asks for history. */
 function historyFor(props: FormFieldProps, fieldRef: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>) {
@@ -351,5 +352,17 @@ export const formRenderers: RendererEntry<React.ComponentType<FormFieldProps>>[]
     tester: (field, ctx) => ctx.mode === 'form' && field.zodType === 'date' ? PRIORITY.DEFAULT : -1,
     renderer: DateInput,
     name: 'DateInput',
+  },
+  // Array fields ('tags' form fields), unless another widget is declared; an
+  // explicit `editWidget: 'tags'` asks for this widget on any field.
+  {
+    tester: (field, ctx) => {
+      if (ctx.mode !== 'form') return -1;
+      const widget = (field as any).editWidget;
+      if (widget === 'tags') return PRIORITY.OVERRIDE;
+      return field.zodType === 'array' && !widget ? PRIORITY.DEFAULT : -1;
+    },
+    renderer: TagInput,
+    name: 'TagInput',
   },
 ];

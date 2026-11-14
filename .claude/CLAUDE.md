@@ -9,21 +9,27 @@ A zodal UI renderer package for shadcn/ui components. Provides concrete React co
 ```
 src/
   index.ts             — Public exports
-  types.ts             — Shared prop types (CellProps, FormFieldProps, FilterFieldProps)
+  types.ts             — Shared prop types (CellProps, FormFieldProps, FilterFieldProps, FieldBinding, BoundFieldProps)
   registry.ts          — createShadcnRegistry() factory
   view-types.ts        — Structural ViewConfig (mirror of @zodal/ui's toViewConfig output; npm lacks it yet)
   options-form-types.ts — Structural OptionsFormField + optionsFieldAffordance (same reason as view-types)
   group-items.ts       — Local copy of @zodal/ui groupItems/groupId (same reason)
+  cell-label.ts        — cellLabel: a cell's option label (scalar cells and array chips)
+  tag-logic.ts         — Framework-free tag logic: draft resolution, option matching, the contains-filter value, suggestion pacing (mirrored in ui-vanilla; keep the copies identical)
   components/
     ghost-slider.ts    — GhostSlider: native range input + ghost thumb at the saved value (editWidget 'slider')
   renderers/
-    cell-renderers.ts  — Table cell renderers (text, number, boolean, date, badge, array, currency)
-    form-renderers.ts  — Form field renderers (text, number, checkbox, select, date)
+    cell-renderers.ts  — Table cell renderers (text, number, boolean, date, badge, array → chips, currency)
+    form-renderers.ts  — Form field renderers (text, number, checkbox, select, date, tags)
     options-form-renderers.ts — Options-form widgets keyed on editWidget: fieldset, password, code
-    filter-renderers.ts — Filter widget renderers (text, select, range, boolean)
+    filter-renderers.ts — Filter widget renderers (text, select, range, boolean, chip filter)
+    tag-renderers.ts   — Tag widgets: createTagInput / createChipFilter / createChipCell (React, hooks)
     view-renderers.ts  — Collection view: CollectionView, ListItem, GridCard
+    content-renderers.ts — ContentRef cell (link / image thumbnail) and file-upload form field
 tests/
-  registry.test.ts     — Registry resolution tests
+  registry.test.ts     — Registry resolution tests (pinned winners per mode; no winner changes for non-array fields)
+  tag-logic.test.ts    — Tag logic (draft resolution, filter value, suggestion pacing)
+  tag-renderers.test.ts — Tag widgets rendered with react-dom/client + act in jsdom (keyboard, ARIA, suggest, raw values, overflow)
   browser/             — `pnpm test:browser`: layout checks in headless Chromium (playwright-core), not in CI
 ```
 
@@ -33,6 +39,10 @@ tests/
 - **Priority-based resolution**: Each renderer has a tester function that returns a PRIORITY score
 - **Plain HTML baseline**: Current renderers use plain HTML elements; replace with actual shadcn/ui components as needed
 - **Escape hatches**: Users can override any renderer by registering a higher-priority entry
+- **Props = `FieldRenderProps` with `field` as the binding**: form/filter components get `{ field: { value, onChange }, config, context?, affordance? }`. `@zodal/ui`'s `FieldRenderProps.field` is the affordance, which collides with this package's binding; renaming it would break callers, so the affordance travels as `affordance` and `context` (carrying `suggest`) is optional
+- **Tag widgets**: controlled inputs; several commits in one event (a paste) report one `onChange`; typed text survives refusal, error and blur; the chip filter always emits an `arrayContainsAny` `FilterCondition` (OR within the field, equal to `arrayContains` for one value, a value shape that never flips)
+- **Tests without @testing-library**: `react-dom/client` `createRoot` + `act` from `react`, `IS_REACT_ACT_ENVIRONMENT = true`; set input values through the native `value` setter before dispatching `input` so React's onChange fires
+- **Known quirk, left as is**: the cell fallback (`() => FALLBACK`) matches every mode, so fields with no form/filter renderer of their own resolve to `TextCell (fallback)` in form/filter mode; `tests/registry.test.ts` pins it
 
 ## Skills
 
@@ -41,7 +51,7 @@ Before working on this package, read the zodal UI renderer skill:
 
 ## Dependencies
 
-- `@zodal/core` and `@zodal/ui` as peer dependencies
+- `@zodal/core` and `@zodal/ui` as peer dependencies, caret on the lowest version needed (`^0.2.6`; see zodal's `docs/versioning.md`)
 - `react` and `react-dom` as peer dependencies
 - Build: tsup (dual CJS/ESM + .d.ts)
 - Test: vitest with jsdom environment

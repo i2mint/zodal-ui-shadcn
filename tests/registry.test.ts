@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createShadcnRegistry, cellRenderers, formFieldAffordance } from '../src/index.js';
+import { createRendererRegistry } from '@zodal/ui';
+import { createShadcnRegistry, cellRenderers, formFieldAffordance, TagInput, ChipFilter, ChipCell } from '../src/index.js';
 import type { ResolvedFieldAffordance } from '@zodal/core';
 
 function mockField(overrides: Partial<ResolvedFieldAffordance> = {}): ResolvedFieldAffordance {
@@ -138,7 +139,7 @@ describe('which renderer wins, per mode (pinned)', () => {
     ['form', { zodType: 'boolean' }, 'CheckboxInput'],
     ['form', { zodType: 'enum' }, 'SelectInput'],
     ['form', { zodType: 'date' }, 'DateInput'],
-    ['form', { zodType: 'array' }, 'ReadOnlyInput (fallback)'],
+    ['form', { zodType: 'array' }, 'TagInput'],
     ['form', { zodType: 'object' }, 'ReadOnlyInput (fallback)'],
     ['form', { zodType: 'set' }, 'ReadOnlyInput (fallback)'],
     ['form', { zodType: 'bigint' }, 'BigIntInput'],
@@ -148,7 +149,7 @@ describe('which renderer wins, per mode (pinned)', () => {
     ['filter', { zodType: 'number', filterable: 'range' }, 'RangeFilter'],
     ['filter', { zodType: 'boolean', filterable: 'boolean' }, 'BooleanFilter'],
     // filterable values as inference produces them (zodal core inference.ts)
-    ['filter', { zodType: 'array', filterable: 'contains' }, 'TextFilter (fallback)'],
+    ['filter', { zodType: 'array', filterable: 'contains' }, 'ChipFilter'],
     ['filter', { zodType: 'set', filterable: 'contains' }, 'TextFilter (fallback)'],
     ['filter', { zodType: 'tuple', filterable: 'contains' }, 'TextFilter (fallback)'],
     ['filter', { zodType: 'bigint', filterable: 'range' }, 'RangeFilter'],
@@ -229,5 +230,51 @@ describe('DateInput with an Invalid Date (#9)', () => {
     const Component = createShadcnRegistry().resolve(mockField({ zodType: 'date' }), { mode: 'form' })!;
     const html = renderToStaticMarkup(React.createElement(Component, { field: { value: new Date('nope'), onChange: () => {} }, config: { name: 'd', label: 'D' } as any }));
     expect(html).toContain('value=""');
+  });
+});
+
+describe('tag renderers in the registry', () => {
+  const registry = createShadcnRegistry();
+  const TAG_ENTRIES = new Set(['TagInput', 'ChipFilter']);
+  // The registry as it was before the tag renderers (ArrayCell keeps its name and tester).
+  const legacy = createRendererRegistry<React.ComponentType<any>>();
+  for (const entry of registry.entries) if (!TAG_ENTRIES.has(entry.name!)) legacy.register(entry);
+
+  // Every field type zodal infers, with the `filterable` its type defaults give.
+  const FIELD_TYPES: Array<[string, unknown]> = [
+    ['string', 'search'], ['number', 'range'], ['int', 'range'], ['float', 'range'], ['bigint', 'range'],
+    ['boolean', 'boolean'], ['enum', 'select'], ['date', 'range'], ['object', false], ['record', false],
+    ['set', 'contains'], ['tuple', 'contains'], ['unknown', false],
+  ];
+  const MODES = ['cell', 'form', 'filter'] as const;
+  const winner = (f: ResolvedFieldAffordance, mode: (typeof MODES)[number]) => registry.explain(f, { mode })[0].name;
+
+  it('changes no winner for any non-array field', () => {
+    for (const [zodType, filterable] of FIELD_TYPES) {
+      for (const mode of MODES) {
+        const field = mockField({ zodType, filterable } as any);
+        expect(registry.resolve(field, { mode }), `${zodType} / ${mode}`).toBe(legacy.resolve(field, { mode }));
+      }
+    }
+  });
+
+  it('resolves the chip renderers for an array field', () => {
+    const field = mockField({ zodType: 'array', filterable: 'contains' } as any);
+    expect(MODES.map((mode) => winner(field, mode))).toEqual(['ArrayCell', 'TagInput', 'ChipFilter']);
+    expect(registry.resolve(field, { mode: 'form' })).toBe(TagInput);
+    expect(registry.resolve(field, { mode: 'filter' })).toBe(ChipFilter);
+    expect(registry.resolve(field, { mode: 'cell' })).toBe(ChipCell);
+  });
+
+  it('keys the chip filter on contains over an array, not on a string', () => {
+    const substring = mockField({ zodType: 'string', filterable: 'contains' } as any);
+    expect(winner(substring, 'filter')).not.toBe('ChipFilter');
+    expect(registry.resolve(substring, { mode: 'filter' })).toBe(legacy.resolve(substring, { mode: 'filter' }));
+    expect(winner(mockField({ zodType: 'array', filterable: 'multiSelect' } as any), 'filter')).toBe('MultiSelectFilter');
+  });
+
+  it('respects editWidget: another widget declared on an array, or tags asked for on any field', () => {
+    expect(winner(mockField({ zodType: 'array', editWidget: 'json' } as any), 'form')).not.toBe('TagInput');
+    expect(winner(mockField({ zodType: 'string', editWidget: 'tags' } as any), 'form')).toBe('TagInput');
   });
 });

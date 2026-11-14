@@ -9,23 +9,10 @@ import React from 'react';
 import { PRIORITY } from '@zodal/ui';
 import type { RendererEntry } from '@zodal/ui';
 import type { CellProps } from '../types.js';
+import { ChipCell } from './tag-renderers.js';
+import { cellLabel } from '../cell-label.js';
 
-/**
- * The text a cell shows for a value: its option label from `ColumnConfig.meta.options`
- * (i2mint/zodal#100; the same options its form and filter get), else the value itself. Matches
- * `labelOf` in `@zodal/ui` (values compared as strings); read structurally since the `@zodal/ui`
- * this builds against predates `meta.options`.
- */
-export function cellLabel(config: CellProps['config'], value: unknown): string {
-  const options = (config.meta as { options?: unknown }).options;
-  if (Array.isArray(options)) {
-    const key = String(value);
-    const hit = options.find((o) => o && typeof o === 'object' && String((o as { value?: unknown }).value) === key);
-    const label = hit && (hit as { label?: unknown }).label;
-    if (typeof label === 'string' && label !== '') return label;
-  }
-  return String(value ?? '');
-}
+export { cellLabel };
 
 // --- Text Cell (fallback and string default) ---
 function TextCell({ value, config }: CellProps) {
@@ -66,12 +53,6 @@ function BadgeCell({ value, config }: CellProps) {
     className: `inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium`,
     'data-variant': variant,
   }, value == null ? '' : cellLabel(config, value));
-}
-
-// --- Array Cell ---
-function ArrayCell({ value, config }: CellProps) {
-  if (!Array.isArray(value)) return React.createElement('span', null, '\u2014');
-  return React.createElement('span', null, value.map((v) => cellLabel(config, v)).join(', '));
 }
 
 export const cellRenderers: RendererEntry<React.ComponentType<CellProps>>[] = [
@@ -115,7 +96,8 @@ export const cellRenderers: RendererEntry<React.ComponentType<CellProps>>[] = [
   // Array
   {
     tester: (field, ctx) => ctx.mode === 'cell' && field.zodType === 'array' ? PRIORITY.DEFAULT : -1,
-    renderer: ArrayCell,
+    // Chips with "+N" overflow (see tag-renderers.ts); the name is kept for lookups.
+    renderer: ChipCell,
     name: 'ArrayCell',
   },
   // Currency (specialized number)

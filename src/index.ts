@@ -1,3 +1,11 @@
+/**
+ * @zodal/ui-shadcn: zodal renderers as React components (shadcn/Tailwind styling).
+ *
+ * `createShadcnRegistry()` holds every renderer; the arrays (`cellRenderers`,
+ * `formRenderers`, `filterRenderers`, content renderers) are exported for
+ * selective use, and the tag widgets' factories for custom settings.
+ */
+
 export { createShadcnRegistry } from './registry.js';
 export { cellRenderers } from './renderers/cell-renderers.js';
 export { formRenderers } from './renderers/form-renderers.js';
@@ -9,7 +17,6 @@ export { formFieldAffordance } from './form-field-affordance.js';
 export { optionsFieldAffordance } from './options-form-types.js';
 export type { OptionsFormField } from './options-form-types.js';
 export { contentCellRenderers, contentFormRenderers } from './renderers/content-renderers.js';
-export type { CellProps, FormFieldProps, FilterFieldProps, FieldRenderContext } from './types.js';
 export {
   useFieldHistory,
   HistoryButton,
@@ -52,3 +59,35 @@ export { usePress, PressIndicator, PRESS_CLASS } from './press.js';
 export type { PressOptions, PressProps } from './press.js';
 export { FEEDBACK_MS, feedbackFor, createActionFeedback, isCommandFailure } from './action-feedback.js';
 export type { FeedbackLevel, ActionStatus, ActionFeedbackState, ActionFeedbackOptions, ActionFeedback, FeedbackClock } from './action-feedback.js';
+export {
+  createTagInput,
+  createChipFilter,
+  createChipCell,
+  TagInput,
+  ChipFilter,
+  ChipCell,
+} from './renderers/tag-renderers.js';
+export {
+  DEFAULT_TAG_MESSAGES,
+  DEFAULT_TAG_SETTINGS,
+  resolveTagSettings,
+  toContainsFilter,
+  fromContainsFilter,
+  createSuggestionController,
+} from './tag-logic.js';
+export type {
+  TagMessages,
+  TagSettings,
+  TagValue,
+  TagOption,
+  SuggestionState,
+  SuggestionController,
+} from './tag-logic.js';
+export type {
+  CellProps,
+  FormFieldProps,
+  FilterFieldProps,
+  FieldBinding,
+  BoundFieldProps,
+  FieldRenderContext,
+} from './types.js';
