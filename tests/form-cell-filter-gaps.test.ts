@@ -26,10 +26,10 @@ describe('#28 text lengths', () => {
 describe('#29 option labels in cells', () => {
   const options = [{ value: '60', label: 'Every hour' }, { value: 'a', label: 'Alpha' }];
   it('draws the option label for scalars, enums and each array element', () => {
-    for (const [zodType, value, want] of [['number', 60, 'Every hour'], ['enum', 'a', 'Alpha'], ['string', 'zz', 'zz'], ['array', ['a', 'b'], 'Alpha, b']] as const) {
+    for (const [zodType, value, want] of [['number', 60, 'Every hour'], ['enum', 'a', 'Alpha'], ['string', 'zz', 'zz'], ['array', ['a', 'b'], ['Alpha', '>b<']]] as const) {
       const Cell = reg.resolve(aff({ zodType }), { mode: 'cell' })!;
       const html = renderToStaticMarkup(React.createElement(Cell as any, { value, config: { meta: { options } } }));
-      expect(html).toContain(want);
+      for (const w of [want].flat()) expect(html).toContain(w);
     }
     expect(cellLabel({ meta: {} } as any, 3)).toBe('3');
   });
