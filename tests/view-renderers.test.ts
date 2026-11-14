@@ -195,3 +195,33 @@ describe('groupItems (local copy of @zodal/ui)', () => {
     expect(groupItems(items, tags).map((g) => [g.id, g.items.length])).toEqual([['tags:loud', 1], [groupId('tags', null), 2]]);
   });
 });
+
+describe('load status (zodal#111) and Reorder mode (zodal#127)', () => {
+  const flat = config('list', { group: null as any });
+  it('a first load draws skeleton rows; a fast one does not; a refresh keeps the items, busy', () => {
+    const c = mount(view({ config: flat, items: [], loadStatus: 'first-load', skeletonCount: 3 }));
+    expect(c.querySelectorAll('[data-role="skeleton"]').length).toBe(3);
+    expect(c.querySelector('[data-role="collection-view"]')!.getAttribute('aria-busy')).toBe('true');
+    rerender(view({ config: flat, items: [], loadStatus: 'first-load', loadElapsedMs: 50 }));
+    expect(c.querySelectorAll('[data-role="skeleton"]').length).toBe(0);
+    rerender(view({ config: flat, loadStatus: 'refreshing' }));
+    expect(c.querySelector('[data-role="collection-view"]')!.getAttribute('data-load')).toBe('stale');
+    expect(c.querySelectorAll('[data-role="list-item"]').length).toBe(3);
+  });
+  it('Up/Down with disabled ends; focus follows the moved item; the move is announced', () => {
+    const moves: string[] = [];
+    const onMove = (id: string, d: string) => void moves.push(`${id}:${d}`);
+    const c = mount(view({ config: flat, reorder: { active: true, onMove } }));
+    const btn = (id: string, d: string) => c.querySelector(`[data-id="${id}"] [data-move="${d}"]`) as HTMLButtonElement;
+    expect(btn('i1', 'up').disabled).toBe(true);
+    expect(btn('i3', 'down').disabled).toBe(true);
+    expect(btn('i2', 'up').getAttribute('aria-label')).toBe('Move Flute up');
+    click(btn('i1', 'down'));
+    expect(moves).toEqual(['i1:down']);
+    rerender(view({ config: flat, items: [items[1]!, items[0]!, items[2]!], reorder: { active: true, onMove, moved: { id: 'i1', direction: 'down' } } }));
+    expect(document.activeElement).toBe(btn('i1', 'down'));
+    expect(c.querySelector('[data-role="reorder-status"]')!.textContent).toBe('Moved Violin to position 2 of 3');
+    rerender(view({ config: flat }));
+    expect(c.querySelector('[data-move]')).toBeNull();
+  });
+});
