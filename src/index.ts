@@ -25,8 +25,8 @@ export {
 export type { FieldHistoryState, HistoryButtonProps, HistoryListProps, FieldHistoryProps } from './components/field-history.js';
 export { fieldHistoryOf, DEFAULT_HISTORY_MAX } from './history-types.js';
 export type { FieldHistoryStore, HistoryEntry, HistoryReason, ResolvedFieldHistory } from './history-types.js';
-export { CollectionView, ListItem, GridCard, itemId } from './renderers/view-renderers.js';
-export type { ItemViewProps, CollectionViewProps, ValueRenderer } from './renderers/view-renderers.js';
+export { CollectionView, ListItem, GridCard, itemId, loadFeedbackOf } from './renderers/view-renderers.js';
+export type { ItemViewProps, CollectionViewProps, ValueRenderer, ViewLoadStatus, ReorderOptions, ItemReorder } from './renderers/view-renderers.js';
 export { groupItems, groupId } from './group-items.js';
 export type { ItemGroup, GroupItemsOptions } from './group-items.js';
 export type { ViewConfig, ViewFieldConfig, ViewGroupConfig, ViewOperationConfig } from './view-types.js';

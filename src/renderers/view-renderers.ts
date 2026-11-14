@@ -25,6 +25,7 @@ import React from 'react';
 import { groupItems } from '../group-items.js';
 import { usePress, PressIndicator, PRESS_CLASS } from '../press.js';
 import type { ViewConfig, ViewFieldConfig, ViewOperationConfig } from '../view-types.js';
+import { FEEDBACK_MS } from '../action-feedback.js';
 
 type Item = Record<string, unknown>;
 const h = React.createElement;
@@ -55,6 +56,37 @@ export interface ItemViewProps {
    * the promise of whatever opening takes (a fetch, a lazy route): the item shows it is opening.
    */
   onOpen?: (item: Item) => unknown;
+  /** The Reorder mode's controls for this item (set by `CollectionView` when `reorder.active`). */
+  reorderControls?: ItemReorder;
+}
+
+/** One item's Up/Down controls in Reorder mode (zodal#127). */
+export interface ItemReorder {
+  canUp: boolean;
+  canDown: boolean;
+  onMove: (direction: 'up' | 'down') => unknown;
+  /** Focus this button after rendering (focus follows the moved item). */
+  focus?: 'up' | 'down';
+}
+
+/** Where a collection's load is (`CollectionState.loadStatus` in `@zodal/ui`, zodal#111). */
+export type ViewLoadStatus = 'idle' | 'first-load' | 'refreshing' | 'ready' | 'empty' | 'error';
+
+/** The hand-order (Reorder) mode of a collection view (zodal#127). */
+export interface ReorderOptions {
+  /** Draw the Up/Down buttons (an explicit mode, so rows stay readable outside it). */
+  active: boolean;
+  /** Move an item one place; the host reorders (`moveUp`/`moveDown` from `@zodal/core`). */
+  onMove: (id: string, direction: 'up' | 'down', item: Item) => unknown;
+  /** The item just moved: focus follows it and the move is announced. */
+  moved?: { id: string; direction: 'up' | 'down' };
+}
+
+/** What a view shows for its load (the same rule as `getLoadFeedback` in `@zodal/ui`). */
+export function loadFeedbackOf(status: ViewLoadStatus | undefined, elapsedMs?: number): 'skeleton' | 'stale' | 'none' {
+  if (status !== 'first-load' && status !== 'refreshing') return 'none';
+  if (elapsedMs !== undefined && elapsedMs < FEEDBACK_MS.indicator) return 'none';
+  return status === 'first-load' ? 'skeleton' : 'stale';
 }
 
 /** What the collection view takes. */
@@ -75,6 +107,14 @@ export interface CollectionViewProps extends Omit<ItemViewProps, 'item' | 'selec
   emptyLabel?: string;
   /** Shown when there are no items. Default: `'No items'`. */
   emptyText?: string;
+  /** `CollectionState.loadStatus`: `first-load` draws skeleton rows, `refreshing` keeps the items dimmed (zodal#111). */
+  loadStatus?: ViewLoadStatus;
+  /** Time since the load started; under `FEEDBACK_MS.indicator` nothing is shown. */
+  loadElapsedMs?: number;
+  /** Skeleton rows a first load draws. Default: 6. */
+  skeletonCount?: number;
+  /** Hand order: an explicit Reorder mode with Up/Down buttons (zodal#127). */
+  reorder?: ReorderOptions;
 }
 
 /** The item's id, as a string. */
@@ -220,6 +260,32 @@ function useItemRoot({ item, config, selected, onOpen }: ItemViewProps) {
 // Item components
 // ============================================================================
 
+/** Up/Down at touch size, disabled (not hidden) at the ends; the focused one after a move. */
+function ReorderButtons({ label, reorder }: { label: string; reorder: ItemReorder }) {
+  const up = React.useRef<HTMLButtonElement>(null);
+  const down = React.useRef<HTMLButtonElement>(null);
+  React.useEffect(() => {
+    if (!reorder.focus) return;
+    const wanted = reorder.focus === 'up' ? up.current : down.current;
+    const other = reorder.focus === 'up' ? down.current : up.current;
+    (wanted && !wanted.disabled ? wanted : other)?.focus();
+  }, [reorder.focus]);
+  const button = (direction: 'up' | 'down', ref: React.RefObject<HTMLButtonElement | null>, enabled: boolean) =>
+    h('button', {
+      ref,
+      type: 'button',
+      className: 'inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border disabled:opacity-35',
+      'data-move': direction,
+      'aria-label': `Move ${label} ${direction}`,
+      disabled: !enabled,
+      onClick: (e: React.MouseEvent) => {
+        e.stopPropagation();
+        void reorder.onMove(direction);
+      },
+    }, direction === 'up' ? '\u2191' : '\u2193');
+  return h('div', { className: 'ml-auto flex gap-1', 'data-role': 'reorder' }, button('up', up, reorder.canUp), button('down', down, reorder.canDown));
+}
+
 /** One item as a list row: checkbox, thumbnail, label, badges, secondary text, operations. */
 export function ListItem(props: ItemViewProps) {
   const { item, config, onOperation } = props;
@@ -230,6 +296,7 @@ export function ListItem(props: ItemViewProps) {
     h('div', { className: 'flex min-w-0 flex-1 flex-col gap-1' }, h(Body, props)),
     indicator,
     onOperation ? h(Operations, { ops: config.operations.item, run: (op) => onOperation(op, item) }) : null,
+    props.reorderControls ? h(ReorderButtons, { label: labelText(item, config), reorder: props.reorderControls }) : null,
   );
 }
 
@@ -241,7 +308,19 @@ export function GridCard(props: ItemViewProps) {
     h(Image, { item, config, className: 'aspect-video w-full' }),
     h('div', { className: 'flex flex-col gap-2 p-3' }, h(SelectBox, props), h(Body, props), indicator),
     onOperation ? h(Operations, { ops: config.operations.item, run: (op) => onOperation(op, item), className: 'flex gap-1 border-t p-2' }) : null,
+    props.reorderControls ? h('div', { className: 'border-t p-2' }, h(ReorderButtons, { label: labelText(item, config), reorder: props.reorderControls })) : null,
   );
+}
+
+/** A placeholder in the final layout for a first load (zodal#111). */
+function SkeletonItem({ config }: { config: ViewConfig }) {
+  const bars = [h('div', { key: 'l', className: 'h-4 w-1/2 rounded bg-muted motion-safe:animate-pulse' })];
+  for (let i = 0; i < Math.min(config.fields.secondary.length, 2); i++) {
+    bars.push(h('div', { key: `s${i}`, className: 'h-3 w-4/5 rounded bg-muted motion-safe:animate-pulse' }));
+  }
+  return config.kind === 'grid'
+    ? h('article', { className: 'flex flex-col gap-2 rounded-lg border p-3', 'data-role': 'skeleton', 'aria-hidden': true }, ...bars)
+    : h('li', { className: 'flex flex-col gap-1 border-b px-3 py-2', 'data-role': 'skeleton', 'aria-hidden': true }, ...bars);
 }
 
 /** A collapsible group's header: a button with press feedback, like every pressable here. */
@@ -281,9 +360,20 @@ export function CollectionView(props: CollectionViewProps) {
   const groupContentId = React.useId();
 
   const ItemComponent = config.kind === 'grid' ? GridCard : ListItem;
+  const reorder = props.reorder?.active ? props.reorder : undefined;
+  const order = reorder ? items.map((i) => itemId(i, config)) : [];
+  const reorderFor = (item: Item): ItemReorder | undefined => {
+    if (!reorder) return undefined;
+    const id = itemId(item, config);
+    const at = order.indexOf(id);
+    const out: ItemReorder = { canUp: at > 0, canDown: at < order.length - 1, onMove: (d) => reorder.onMove(id, d, item) };
+    if (reorder.moved?.id === id) out.focus = reorder.moved.direction;
+    return out;
+  };
   const drawItems = (list: readonly Item[], groupKey: string) => {
     const children = list.map((item) =>
       h(ItemComponent, {
+        reorderControls: reorderFor(item),
         key: `${groupKey}/${itemId(item, config)}`,
         item,
         config,
@@ -309,8 +399,15 @@ export function CollectionView(props: CollectionViewProps) {
       })
     : null;
 
+  const feedback = loadFeedbackOf(props.loadStatus, props.loadElapsedMs);
   let content: React.ReactNode;
-  if (items.length === 0) {
+  if (feedback === 'skeleton' && items.length === 0) {
+    // Placeholders in the final layout, so nothing shifts when the items land.
+    const rows = Array.from({ length: props.skeletonCount ?? 6 }, (_, i) => h(SkeletonItem, { key: i, config }));
+    content = config.kind === 'grid'
+      ? h('div', { className: 'grid grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-4', 'data-role': 'grid' }, ...rows)
+      : h('ul', { className: 'flex flex-col', 'data-role': 'list' }, ...rows);
+  } else if (items.length === 0) {
     content = h('p', { className: 'py-6 text-center text-sm text-muted-foreground', 'data-role': 'empty' }, emptyText);
   } else {
     const groups = groupItems(items, config.group, { collapsedGroups, expandedGroups, emptyLabel });
@@ -339,5 +436,21 @@ export function CollectionView(props: CollectionViewProps) {
       );
     });
   }
-  return h('div', { className: 'flex flex-col gap-2', 'data-role': 'collection-view', 'data-kind': config.kind }, toolbar, content);
+  let announcement = '';
+  if (reorder?.moved) {
+    const at = order.indexOf(reorder.moved.id);
+    const item = items[at];
+    if (item) announcement = `Moved ${labelText(item, config)} to position ${at + 1} of ${order.length}`;
+  }
+  return h('div', {
+    className: `flex flex-col gap-2${feedback === 'stale' ? ' opacity-60 transition-opacity' : ''}`,
+    'data-role': 'collection-view',
+    'data-kind': config.kind,
+    ...(feedback !== 'none' ? { 'aria-busy': true, 'data-load': feedback } : {}),
+    ...(reorder ? { 'data-reorder': 'true' } : {}),
+  },
+    toolbar,
+    content,
+    reorder ? h('div', { className: 'sr-only', role: 'status', 'aria-live': 'polite', 'data-role': 'reorder-status' }, announcement) : null,
+  );
 }
