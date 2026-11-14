@@ -30,8 +30,43 @@ function SelectFilter({ field, config }: FilterFieldProps) {
   );
 }
 
+/** `yyyy-mm-dd` (UTC) for a date filter bound held as a Date or epoch ms; '' when unset. */
+function toDateInput(v: unknown): string {
+  if (v == null || v === '') return '';
+  const d = v instanceof Date ? v : new Date(v as number | string);
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+}
+
+/** A date bound (Date, epoch ms or ISO string) as the `min`/`max` of a date input. */
+function toDateBound(v: unknown): string | undefined {
+  return v == null ? undefined : toDateInput(v) || undefined;
+}
+
 function RangeFilter({ field, config }: FilterFieldProps) {
   const [min, max] = Array.isArray(field.value) ? field.value : [undefined, undefined];
+  if (config.zodType === 'date') {
+    // Dates in, dates out (i2mint/zodal#105): the filter value holds Date objects, never ms.
+    const read = (s: string) => (s ? new Date(`${s}T00:00:00.000Z`) : undefined);
+    const b = config.bounds as { min?: unknown; max?: unknown } | undefined;
+    return React.createElement('div', { style: { display: 'flex', gap: '4px' } },
+      React.createElement('input', {
+        type: 'date',
+        'aria-label': `${config.label} from`,
+        value: toDateInput(min),
+        min: toDateBound(b?.min),
+        max: toDateBound(b?.max),
+        onChange: (e: any) => field.onChange([read(e.target.value), max]),
+      }),
+      React.createElement('input', {
+        type: 'date',
+        'aria-label': `${config.label} to`,
+        value: toDateInput(max),
+        min: toDateBound(b?.min),
+        max: toDateBound(b?.max),
+        onChange: (e: any) => field.onChange([min, read(e.target.value)]),
+      }),
+    );
+  }
   return React.createElement('div', { style: { display: 'flex', gap: '4px' } },
     React.createElement('input', {
       type: 'number',
@@ -76,7 +111,8 @@ const INTEGER_TYPES = new Set(['int', 'bigint']);
 
 /** A range filter as a two-thumb slider plus two number fields; the filter is written on commit. */
 function RangeSliderFilter({ field, config }: FilterFieldProps) {
-  const scale = React.useMemo(() => rangeSliderScale(config), [config]);
+  // A date range is entered as dates (its slider would label the track in raw milliseconds).
+  const scale = React.useMemo(() => (config.zodType === 'date' ? null : rangeSliderScale(config)), [config]);
   const committed: RangeValue = Array.isArray(field.value) ? [field.value[0], field.value[1]] : [undefined, undefined];
   const [preview, setPreview] = React.useState<RangeValue | null>(null);
   // A new filter value (a commit landing, or an external reset) ends any preview.

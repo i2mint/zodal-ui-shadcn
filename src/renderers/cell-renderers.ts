@@ -10,9 +10,26 @@ import { PRIORITY } from '@zodal/ui';
 import type { RendererEntry } from '@zodal/ui';
 import type { CellProps } from '../types.js';
 
+/**
+ * The text a cell shows for a value: its option label from `ColumnConfig.meta.options`
+ * (i2mint/zodal#100; the same options its form and filter get), else the value itself. Matches
+ * `labelOf` in `@zodal/ui` (values compared as strings); read structurally since the `@zodal/ui`
+ * this builds against predates `meta.options`.
+ */
+export function cellLabel(config: CellProps['config'], value: unknown): string {
+  const options = (config.meta as { options?: unknown }).options;
+  if (Array.isArray(options)) {
+    const key = String(value);
+    const hit = options.find((o) => o && typeof o === 'object' && String((o as { value?: unknown }).value) === key);
+    const label = hit && (hit as { label?: unknown }).label;
+    if (typeof label === 'string' && label !== '') return label;
+  }
+  return String(value ?? '');
+}
+
 // --- Text Cell (fallback and string default) ---
 function TextCell({ value, config }: CellProps) {
-  const str = String(value ?? '');
+  const str = value == null ? '' : cellLabel(config, value);
   const truncate = config.meta.truncate;
   if (truncate && str.length > truncate) {
     return React.createElement('span', { title: str }, str.slice(0, truncate) + '...');
@@ -25,7 +42,7 @@ function NumberCell({ value, config }: CellProps) {
   if (value == null) return React.createElement('span', { className: 'text-muted-foreground' }, '\u2014');
   const formatted = config.meta.displayFormat === 'currency'
     ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value as number)
-    : String(value);
+    : cellLabel(config, value);
   return React.createElement('span', null, formatted);
 }
 
@@ -48,13 +65,13 @@ function BadgeCell({ value, config }: CellProps) {
   return React.createElement('span', {
     className: `inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium`,
     'data-variant': variant,
-  }, str);
+  }, value == null ? '' : cellLabel(config, value));
 }
 
 // --- Array Cell ---
-function ArrayCell({ value }: CellProps) {
+function ArrayCell({ value, config }: CellProps) {
   if (!Array.isArray(value)) return React.createElement('span', null, '\u2014');
-  return React.createElement('span', null, value.join(', '));
+  return React.createElement('span', null, value.map((v) => cellLabel(config, v)).join(', '));
 }
 
 export const cellRenderers: RendererEntry<React.ComponentType<CellProps>>[] = [

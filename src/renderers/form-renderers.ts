@@ -27,6 +27,18 @@ function historyFor(props: FormFieldProps, fieldRef: React.RefObject<HTMLInputEl
   });
 }
 
+/**
+ * `minLength` / `maxLength` from `FormFieldConfig` (i2mint/zodal#84), read structurally since the
+ * `@zodal/ui` this builds against predates them; absent (or not a number) means unconstrained.
+ */
+function lengthProps(config: object): { minLength?: number; maxLength?: number } {
+  const c = config as { minLength?: unknown; maxLength?: unknown };
+  const out: { minLength?: number; maxLength?: number } = {};
+  if (typeof c.minLength === 'number' && Number.isFinite(c.minLength)) out.minLength = c.minLength;
+  if (typeof c.maxLength === 'number' && Number.isFinite(c.maxLength)) out.maxLength = c.maxLength;
+  return out;
+}
+
 /** A single-line text input; with history, the history button sits at its inline end, outside the box. */
 function TextInput(props: FormFieldProps) {
   const { field, config } = props;
@@ -41,6 +53,7 @@ function TextInput(props: FormFieldProps) {
     placeholder: config.placeholder,
     required: config.required,
     disabled: config.disabled,
+    ...lengthProps(config),
     className: history ? 'min-w-0 flex-1' : undefined,
   });
   return React.createElement('div', null,
@@ -66,6 +79,7 @@ function TextareaInput(props: FormFieldProps) {
       placeholder: config.placeholder,
       required: config.required,
       disabled: config.disabled,
+      ...lengthProps(config),
       className: 'w-full',
     }),
     config.helpText && React.createElement('p', { className: 'text-sm text-muted-foreground' }, config.helpText),
