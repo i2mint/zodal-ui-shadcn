@@ -4,12 +4,12 @@
  * repeat presses, while the work it started is in flight.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { CollectionView, GridCard, ListItem, usePress, PRESS_CLASS, FEEDBACK_MS } from '../src/index.js';
 import type { ViewConfig } from '../src/index.js';
+import * as shadcn from '../src/index.js';
+import * as zodalUi from '@zodal/ui';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 const h = React.createElement;
@@ -174,16 +174,11 @@ describe('the feedback contract, for every pressable', () => {
   });
 });
 
-describe('src/action-feedback.ts is a faithful copy of @zodal/ui feedback.ts', () => {
-  const core = resolve(process.cwd(), '../zodal/packages/ui/src/feedback.ts'); // tests run from the package root
-  const body = (text: string) =>
-    text
-      .slice(text.indexOf('*/\n') + 3)
-      .replace(/import type \{ OperationCommandResult \} from '@zodal\/core';\n/, '')
-      .replace('(value as Partial<OperationCommandResult<unknown>>).ok === false', '(value as { ok?: unknown }).ok === false')
-      .trim();
-  it.skipIf(!existsSync(core))('matches the sibling checkout (skipped where zodal is not beside this repo)', () => {
-    const mirror = readFileSync(resolve(process.cwd(), 'src/action-feedback.ts'), 'utf8');
-    expect(body(mirror)).toBe(body(readFileSync(core, 'utf8')));
+describe('the feedback primitives are @zodal/ui\'s own', () => {
+  it('re-exports FEEDBACK_MS, feedbackFor, createActionFeedback and isCommandFailure from @zodal/ui', () => {
+    expect(shadcn.FEEDBACK_MS).toBe(zodalUi.FEEDBACK_MS);
+    expect(shadcn.feedbackFor).toBe(zodalUi.feedbackFor);
+    expect(shadcn.createActionFeedback).toBe(zodalUi.createActionFeedback);
+    expect(shadcn.isCommandFailure).toBe(zodalUi.isCommandFailure);
   });
 });
