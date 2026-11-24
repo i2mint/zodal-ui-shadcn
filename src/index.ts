@@ -32,7 +32,7 @@ export type { ItemGroup, GroupItemsOptions } from './group-items.js';
 export type { ViewConfig, ViewFieldConfig, ViewGroupConfig, ViewOperationConfig } from './view-types.js';
 export { GhostSlider, thumbLeft, valuePercent, snapToStep, DEFAULT_THUMB_SIZE_PX, SLIDER_TOUCH_TARGET_PX, SLIDER_TOUCH_SLOP_PX } from './components/ghost-slider.js';
 export type { GhostSliderProps } from './components/ghost-slider.js';
-export { sliderRange, SLIDER_DEFAULTS } from './renderers/form-renderers.js';
+export { sliderRange, SLIDER_DEFAULTS, hasLineBreak, GROWN_TEXT_MAX_ROWS } from './renderers/form-renderers.js';
 export {
   GhostRangeSlider,
   GhostRangeSliderField,

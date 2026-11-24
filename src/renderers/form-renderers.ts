@@ -39,26 +39,94 @@ function lengthProps(config: object): { minLength?: number; maxLength?: number }
   return out;
 }
 
-/** A single-line text input; with history, the history button sits at its inline end, outside the box. */
+/** Does this value hold a line break? (A text input's value sanitization strips them, gluing the lines.) */
+export function hasLineBreak(value: unknown): value is string {
+  return typeof value === 'string' && /\r|\n/.test(value);
+}
+
+/** The most rows a grown text field shows before it scrolls. */
+export const GROWN_TEXT_MAX_ROWS = 8;
+
+/**
+ * May this `text` field hold line breaks? Yes unless its `editWidgetOptions` say
+ * `keepLineBreaks: false` (read structurally: older `@zodal/ui` configs have no such options).
+ */
+function keepsLineBreaks(config: object): boolean {
+  const options = (config as { editWidgetOptions?: { keepLineBreaks?: unknown } }).editWidgetOptions;
+  return options?.keepLineBreaks !== false;
+}
+
+/**
+ * A single-line text input; with history, the history button sits at its inline end, outside the box.
+ *
+ * An `<input>` cannot hold a line break (the browser strips it with no space, so `one\ntwo` would
+ * become `onetwo`; i2mint/zodal-ui-shadcn#40). So the field grows into a textarea when its value
+ * holds one (a history pick, a stored value) or a paste brings one, and stays a textarea while
+ * mounted, so deleting the break does not swap the element (and steal focus) mid-edit. A field that
+ * must stay one line opts out with `editWidgetOptions: { keepLineBreaks: false }`; a multi-line paste
+ * then joins its lines with a space instead of gluing them.
+ */
 function TextInput(props: FormFieldProps) {
   const { field, config } = props;
-  const ref = React.useRef<HTMLInputElement>(null);
+  const keep = keepsLineBreaks(config);
+  const ref = React.useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+  const [grown, setGrown] = React.useState(() => keep && hasLineBreak(field.value));
+  const multiline = keep && (grown || hasLineBreak(field.value));
+  // Latched in state (not only derived), so the next render re-binds whatever watches the element.
+  React.useEffect(() => { if (multiline && !grown) setGrown(true); }, [multiline, grown]);
+  // The caret position a paste asked for, applied once the textarea that replaced the input mounts.
+  const caretAfterPaste = React.useRef<number | null>(null);
+  React.useLayoutEffect(() => {
+    const at = caretAfterPaste.current;
+    const el = ref.current;
+    if (at === null || !el || el.tagName !== 'TEXTAREA') return;
+    caretAfterPaste.current = null;
+    el.focus();
+    try { el.setSelectionRange(at, at); } catch { /* not a text control */ }
+  });
+  const onPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData?.getData('text') ?? '';
+    if (!hasLineBreak(pasted)) return; // the browser's own paste is right
+    e.preventDefault();
+    const el = e.currentTarget;
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? start;
+    const text = keep ? pasted : pasted.replace(/\s*(?:\r\n|\r|\n)\s*/g, ' ');
+    const next = el.value.slice(0, start) + text + el.value.slice(end);
+    if (keep) caretAfterPaste.current = start + text.length;
+    else {
+      const at = start + text.length;
+      // The input stays: put the caret after the pasted text once React has written the value.
+      setTimeout(() => { try { el.setSelectionRange(at, at); } catch { /* detached */ } }, 0);
+    }
+    field.onChange(next);
+  };
   const history = historyFor(props, ref);
-  const input = React.createElement('input', {
+  const common = {
     ref,
     id: config.name,
-    type: 'text',
     value: String(field.value ?? ''),
     onChange: (e: any) => field.onChange(e.target.value),
     placeholder: config.placeholder,
     required: config.required,
     disabled: config.disabled,
     ...lengthProps(config),
-    className: history ? 'min-w-0 flex-1' : undefined,
-  });
+  };
+  const input = multiline
+    ? React.createElement('textarea', {
+        ...common,
+        rows: Math.min(GROWN_TEXT_MAX_ROWS, String(field.value ?? '').split(/\r\n|\r|\n/).length),
+        className: history ? 'min-w-0 flex-1' : 'w-full',
+      })
+    : React.createElement('input', {
+        ...common,
+        type: 'text',
+        onPaste,
+        className: history ? 'min-w-0 flex-1' : undefined,
+      });
   return React.createElement('div', null,
     React.createElement('label', { htmlFor: config.name }, config.label),
-    history ? React.createElement('div', { className: 'flex items-center gap-1' }, input, history) : input,
+    history ? React.createElement('div', { className: multiline ? 'flex items-start gap-1' : 'flex items-center gap-1' }, input, history) : input,
     config.helpText && React.createElement('p', { className: 'text-sm text-muted-foreground' }, config.helpText),
   );
 }
