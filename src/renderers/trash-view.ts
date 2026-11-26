@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { usePress, PressIndicator, PRESS_CLASS } from '../press.js';
+import { ConfirmButton, useTap } from './confirm-button.js';
 
 const h = React.createElement;
 type Item = Record<string, unknown>;
@@ -29,6 +29,8 @@ export interface TrashViewProps {
   onPurge: (ids: string[]) => unknown;
   onEmptyTrash: () => unknown;
   noun?: { one: string; many: string };
+  /** How many items the whole Trash holds, when `items` is one page of it (Empty Trash names it). Default: `items.length`. */
+  totalCount?: number;
 }
 
 const DAY_MS = 86_400_000;
@@ -41,27 +43,18 @@ export function daysLeft(markedAt: unknown, retentionDays: number | undefined, n
   return Math.max(0, Math.ceil((at + retentionDays * DAY_MS - now) / DAY_MS));
 }
 
-/** A button that asks first (naming the count) when `confirmText` is given. */
-function ConfirmButton({ label, confirmText, run, role, destructive }: { label: string; confirmText?: string; run: () => unknown; role: string; destructive?: boolean }) {
-  const [asking, setAsking] = React.useState(false);
-  const { props, state } = usePress(() => {
-    if (confirmText && !asking) { setAsking(true); return undefined; }
-    setAsking(false);
-    return run();
-  });
-  return h('span', { className: 'inline-flex items-center gap-1' },
-    h('button', { ...props, type: 'button', 'data-role': role, className: `${PRESS_CLASS} min-h-9 coarse:min-h-11 rounded border px-3 text-sm ${destructive ? 'text-destructive' : ''} hover:bg-muted` },
-      asking ? confirmText : label, h(PressIndicator, { show: state.indicator })),
-    asking ? h('button', { type: 'button', 'data-role': 'cancel', className: 'min-h-9 coarse:min-h-11 rounded px-2 text-sm underline', onClick: () => setAsking(false) }, 'Cancel') : null);
-}
-
 export function TrashView(p: TrashViewProps) {
-  const { items, idField = 'id', trashField = 'deletedAt', retentionDays, onRestore, onPurge, onEmptyTrash, noun = { one: 'item', many: 'items' } } = p;
+  const { items, idField = 'id', trashField = 'deletedAt', retentionDays, onRestore, onPurge, onEmptyTrash, noun = { one: 'item', many: 'items' }, totalCount } = p;
+  const tap = useTap();
   const now = (p.now ?? Date.now)();
   const labelField = p.labelField ?? (items.some((i) => 'name' in i) ? 'name' : 'title');
   const [selected, setSelected] = React.useState<readonly string[]>([]);
   const ids = items.map((i) => String(i[idField]));
   const chosen = selected.filter((id) => ids.includes(id));
+  // Forget ids that left the Trash, so an item trashed again later does not come back checked.
+  const idsKey = ids.join('\u0000');
+  React.useEffect(() => { setSelected((s) => (s.every((id) => ids.includes(id)) ? s : s.filter((id) => ids.includes(id)))); }, [idsKey]);
+  const done = (run: () => unknown) => async () => { const r = await run(); setSelected([]); return r; };
   const word = (n: number) => (n === 1 ? noun.one : noun.many);
 
   if (items.length === 0) {
@@ -72,16 +65,16 @@ export function TrashView(p: TrashViewProps) {
       ? h('p', { 'data-role': 'retention', className: 'text-sm text-muted-foreground' }, `Items are deleted for good ${retentionDays} days after they are moved to the Trash.`)
       : null,
     h('div', { className: 'flex flex-wrap items-center gap-2', role: 'toolbar', 'aria-label': 'Trash actions' },
-      chosen.length ? h(ConfirmButton, { label: 'Restore', run: () => onRestore([...chosen]), role: 'restore' }) : null,
-      chosen.length ? h(ConfirmButton, { label: 'Delete permanently', confirmText: `Delete ${chosen.length} ${word(chosen.length)} permanently?`, run: () => onPurge([...chosen]), role: 'purge', destructive: true }) : null,
-      h(ConfirmButton, { label: 'Empty Trash', confirmText: `Delete all ${items.length} ${word(items.length)} permanently?`, run: () => onEmptyTrash(), role: 'empty', destructive: true })),
+      chosen.length ? h(ConfirmButton, { label: 'Restore', run: done(() => onRestore([...chosen])), role: 'restore' }) : null,
+      chosen.length ? h(ConfirmButton, { label: 'Delete permanently', confirmText: `Delete ${chosen.length} ${word(chosen.length)} permanently?`, run: done(() => onPurge([...chosen])), role: 'purge', className: 'text-destructive' }) : null,
+      h(ConfirmButton, { label: 'Empty Trash', confirmText: `Delete all ${totalCount ?? items.length} ${word(totalCount ?? items.length)} permanently?`, run: done(() => onEmptyTrash()), role: 'empty', className: 'text-destructive' })),
     h('ul', { className: 'flex flex-col divide-y rounded border', 'data-role': 'items' },
       items.map((item) => {
         const id = String(item[idField]);
         const left = daysLeft(item[trashField], retentionDays, now);
-        return h('li', { key: id, 'data-id': id, className: 'flex items-center gap-3 px-3 py-2 coarse:py-3' },
+        return h('li', { key: id, 'data-id': id, className: 'flex items-center gap-3 px-3 py-2', style: tap ? { minHeight: tap.minHeight } : undefined },
           h('input', {
-            type: 'checkbox', 'aria-label': `Select ${String(item[labelField] ?? id)}`, 'data-role': 'select-row', className: 'h-4 w-4 coarse:h-6 coarse:w-6',
+            type: 'checkbox', 'aria-label': `Select ${String(item[labelField] ?? id)}`, 'data-role': 'select-row', className: 'h-4 w-4', style: tap ? { width: 24, height: 24 } : undefined,
             checked: chosen.includes(id),
             onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSelected((s) => (e.target.checked ? [...s, id] : s.filter((x) => x !== id))),
           }),

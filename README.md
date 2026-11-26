@@ -108,7 +108,7 @@ import { ViewSwitcher, SelectionBanner, ActionBar, TrashView } from '@zodal/ui-s
 
 - **ViewSwitcher** picks chips (up to 5 views), a menu with pinned views first (6 to 15) or a list (more, or nested views); override with `presentation`. The Modified badge appears with Save (saved views only), Save as and Revert.
 - **Selection**: `SelectAllCheckbox` (indeterminate), `RowCheckbox` (a shift-click reports `range: true`; `shiftRangeIds` gives the ids), `useLongPress` for select mode on touch, and `SelectionBanner` ("All 340 matching selected").
-- **ActionBar** shows the count and the bulk actions; refusals show before the click ("3 of 12 can't be added: no file"); `confirm: true` asks with the count, for actions an Undo cannot take back.
+- **ActionBar** shows the count and the bulk actions; refusals show before the click ("3 of 12 can't be added: no file"); `confirm: true` asks with the count (Cancel, Escape; a double-click cannot confirm), for actions an Undo cannot take back. Touch targets grow to 44 px under a coarse pointer.
 - **TrashView**: Restore (no confirmation), Delete permanently and Empty Trash (both confirm, with the count), the retention note and days left per item.
 
 ## Slider with a ghost thumb

@@ -11,6 +11,7 @@
 
 import React from 'react';
 import { usePress, PressIndicator, PRESS_CLASS } from '../press.js';
+import { PressButton, useTap } from './confirm-button.js';
 
 const h = React.createElement;
 
@@ -19,7 +20,7 @@ export interface SwitcherView {
   id: string;
   name: string;
   /** `'system'` views (All, Trash) cannot be deleted. */
-  scope?: 'system' | 'saved' | string;
+  scope?: 'system' | 'personal' | 'shared';
   pinned?: boolean;
   /** The parent view's id, for nested views. */
   parentId?: string;
@@ -58,7 +59,7 @@ export interface ViewSwitcherProps {
   label?: string;
 }
 
-const BASE = 'min-h-9 coarse:min-h-11 rounded-full border px-3 text-sm whitespace-nowrap ';
+const BASE = 'min-h-9 rounded-full border px-3 text-sm whitespace-nowrap ';
 const ACTIVE = 'bg-primary text-primary-foreground border-primary';
 const IDLE = 'bg-background hover:bg-muted';
 
@@ -67,18 +68,12 @@ function ViewButton({ view, active, onSelect, className, depth }: { view: Switch
   return h('button', {
     ...props,
     type: 'button',
-    role: 'tab',
-    'aria-selected': active,
+    'aria-current': active ? 'true' : undefined,
     'data-view-id': view.id,
     'data-depth': depth,
-    style: depth ? { marginLeft: `${depth}rem` } : undefined,
+    style: { ...useTap(), ...(depth ? { marginLeft: `${depth}rem` } : {}) },
     className: `${PRESS_CLASS} ${className ?? BASE + (active ? ACTIVE : IDLE)}`,
   }, view.name, h(PressIndicator, { show: state.indicator }));
-}
-
-function ActionButton({ label, run, role }: { label: string; run: () => unknown; role: string }) {
-  const { props, state } = usePress(run);
-  return h('button', { ...props, type: 'button', 'data-role': role, className: `${PRESS_CLASS} min-h-9 coarse:min-h-11 rounded border px-2 text-sm hover:bg-muted` }, label, h(PressIndicator, { show: state.indicator }));
 }
 
 /** Pinned first, then the rest in the given order. */
@@ -91,7 +86,7 @@ export function ViewSwitcher(props: ViewSwitcherProps) {
 
   let body: React.ReactNode;
   if (presentation === 'chips') {
-    body = h('div', { role: 'tablist', 'aria-label': label, className: 'flex gap-2 overflow-x-auto [scrollbar-width:none]', 'data-role': 'chips' },
+    body = h('div', { role: 'group', 'aria-label': label, className: 'flex gap-2 overflow-x-auto [scrollbar-width:none]', 'data-role': 'chips' },
       views.map((v) => h(ViewButton, { key: v.id, view: v, active: v.id === activeId, onSelect })));
   } else if (presentation === 'menu') {
     // A native select: a sheet on a phone, a menu on a desktop, with no code of ours to get wrong.
@@ -100,7 +95,7 @@ export function ViewSwitcher(props: ViewSwitcherProps) {
     const opt = (v: SwitcherView) => h('option', { key: v.id, value: v.id }, v.name);
     body = h('select', {
       'aria-label': label, 'data-role': 'menu', value: activeId,
-      className: 'min-h-9 coarse:min-h-11 coarse:text-base rounded border bg-background px-2 text-sm',
+      className: 'min-h-9 text-base rounded border bg-background px-2 text-sm',
       onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void onSelect(e.target.value),
     }, pinned.length ? [h('optgroup', { key: 'pinned', label: 'Pinned' }, pinned.map(opt)), h('optgroup', { key: 'all', label: 'All views' }, rest.map(opt))] : views.map(opt));
   } else {
@@ -109,10 +104,10 @@ export function ViewSwitcher(props: ViewSwitcherProps) {
       for (let p = v; p.parentId && d < 10; d++) { const next = views.find((x) => x.id === p.parentId); if (!next) break; p = next; }
       return d;
     };
-    body = h('div', { role: 'tablist', 'aria-orientation': 'vertical', 'aria-label': label, className: 'flex flex-col', 'data-role': 'list' },
+    body = h('div', { role: 'group', 'aria-label': label, className: 'flex flex-col', 'data-role': 'list' },
       pinnedFirst(views).map((v) => h(ViewButton, {
         key: v.id, view: v, active: v.id === activeId, onSelect, depth: depth(v),
-        className: `${PRESS_CLASS} min-h-9 coarse:min-h-11 rounded px-3 text-left text-sm ${v.id === activeId ? 'bg-muted font-medium' : 'hover:bg-muted'}`,
+        className: `${PRESS_CLASS} min-h-9 rounded px-3 text-left text-sm ${v.id === activeId ? 'bg-muted font-medium' : 'hover:bg-muted'}`,
       })));
   }
 
@@ -120,7 +115,7 @@ export function ViewSwitcher(props: ViewSwitcherProps) {
   return h('div', { 'data-zodal-view-switcher': '', 'data-presentation': presentation, className: 'flex flex-wrap items-center gap-2' },
     body,
     modified ? h('span', { 'data-role': 'modified', className: 'rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900' }, 'Modified') : null,
-    canSave ? h(ActionButton, { label: 'Save', run: onSave!, role: 'save' }) : null,
-    modified && onSaveAs ? h(ActionButton, { label: 'Save as…', run: onSaveAs, role: 'save-as' }) : null,
-    modified && onRevert ? h(ActionButton, { label: 'Revert', run: onRevert, role: 'revert' }) : null);
+    canSave ? h(PressButton, { label: 'Save', run: onSave!, role: 'save' }) : null,
+    modified && onSaveAs ? h(PressButton, { label: 'Save as…', run: onSaveAs, role: 'save-as' }) : null,
+    modified && onRevert ? h(PressButton, { label: 'Revert', run: onRevert, role: 'revert' }) : null);
 }

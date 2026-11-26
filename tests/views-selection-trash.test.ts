@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import {
@@ -11,7 +11,8 @@ const h = React.createElement;
 
 let root: Root | undefined;
 let container: HTMLElement | undefined;
-afterEach(() => { act(() => root?.unmount()); container?.remove(); root = undefined; });
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] }); });
+afterEach(() => { act(() => root?.unmount()); container?.remove(); root = undefined; vi.useRealTimers(); });
 function mount(el: React.ReactElement): HTMLElement {
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -20,6 +21,8 @@ function mount(el: React.ReactElement): HTMLElement {
   return container;
 }
 const click = (el: Element | null, init: MouseEventInit = {}) => act(() => { el!.dispatchEvent(new MouseEvent('click', { bubbles: true, ...init })); });
+/** Move the clock past the double-click guard. */
+const later = () => vi.setSystemTime(Date.now() + 1000);
 const q = (c: HTMLElement, sel: string) => c.querySelector(sel);
 const views = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `v${i}`, name: `View ${i}` }));
 
@@ -35,7 +38,7 @@ describe('ViewSwitcher', () => {
 
   it('chips: selects a view; Modified shows Save as and Revert, and Save only on a saved view', async () => {
     const onSelect = vi.fn(); const onSave = vi.fn(); const onRevert = vi.fn(); const onSaveAs = vi.fn();
-    const vs = [{ id: 'all', name: 'All', scope: 'system' }, { id: 'jazz', name: 'Jazz', scope: 'saved' }];
+    const vs = [{ id: 'all', name: 'All', scope: 'system' }, { id: 'jazz', name: 'Jazz', scope: 'personal' }];
     const c = mount(h(ViewSwitcher, { views: vs, activeId: 'all', modified: true, onSelect, onSave, onSaveAs, onRevert }));
     expect(q(c, '[data-role=modified]')).toBeTruthy();
     expect(q(c, '[data-role=save]')).toBeNull(); // system view: Save as only
@@ -115,20 +118,25 @@ describe('selection', () => {
   });
 
   it('long press on touch fires after the delay; a move or a mouse does not', () => {
-    vi.useFakeTimers();
+    {
     try {
       const fired = vi.fn();
       function Row() { return h('div', { id: 'row', ...useLongPress(fired, 400) }); }
       const c = mount(h(Row));
       const row = q(c, '#row')!;
-      const ev = (type: string, pointerType: string) => act(() => { const e = new Event(type, { bubbles: true }); (e as any).pointerType = pointerType; row.dispatchEvent(e); });
+      const ev = (type: string, pointerType: string, x = 0) => act(() => { const e = new Event(type, { bubbles: true }); Object.assign(e, { pointerType, clientX: x, clientY: 0 }); row.dispatchEvent(e); });
       ev('pointerdown', 'mouse'); act(() => { vi.advanceTimersByTime(500); });
       expect(fired).not.toHaveBeenCalled();
-      ev('pointerdown', 'touch'); ev('pointermove', 'touch'); act(() => { vi.advanceTimersByTime(500); });
+      ev('pointerdown', 'touch'); ev('pointermove', 'touch', 3); act(() => { vi.advanceTimersByTime(100); }); ev('pointerup', 'touch'); ev('pointerdown', 'touch'); ev('pointermove', 'touch', 30); act(() => { vi.advanceTimersByTime(500); });
       expect(fired).not.toHaveBeenCalled();
       ev('pointerdown', 'touch'); act(() => { vi.advanceTimersByTime(500); });
       expect(fired).toHaveBeenCalledTimes(1);
-    } finally { vi.useRealTimers(); }
+      // the click that follows a fired long press is swallowed
+      const outer = vi.fn(); container!.addEventListener('click', outer);
+      act(() => { row.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); });
+      expect(outer).not.toHaveBeenCalled();
+    } finally { /* timers restored in afterEach */ }
+    }
   });
 });
 
@@ -155,13 +163,16 @@ describe('ActionBar', () => {
     ] }));
     click(q(c, '[data-action=tag] button'));
     expect(onAction).toHaveBeenCalledTimes(1);
-    const del = q(c, '[data-action=del] [data-role=action]')!;
-    click(del);
+    click(q(c, '[data-action=del] [data-role=action]'));
     expect(onAction).toHaveBeenCalledTimes(1);
-    expect(del.textContent).toBe('Delete 12 songs?');
+    expect(q(c, '[data-action=del] [data-role=action]')!.textContent).toBe('Delete 12 songs?');
+    expect(q(c, '[data-action=del] [data-role=action]')!.getAttribute('data-status')).toBeNull();
     click(q(c, '[data-action=del] [data-role=cancel]'));
     expect(q(c, '[data-action=del] [data-role=action]')!.textContent).toBe('Delete');
     click(q(c, '[data-action=del] [data-role=action]'));
+    click(q(c, '[data-action=del] [data-role=action]')); // the tail of a double-click: ignored
+    expect(onAction).toHaveBeenCalledTimes(1);
+    later();
     click(q(c, '[data-action=del] [data-role=action]'));
     expect(onAction).toHaveBeenCalledTimes(2);
     click(q(c, '[data-action=none] button'));
@@ -185,7 +196,7 @@ describe('TrashView', () => {
     expect(daysLeft('nonsense', 30, now)).toBeUndefined();
   });
 
-  it('empty state, retention note, restore without confirm, purge and empty with confirm and count', () => {
+  it('empty state, retention note, restore without confirm, purge and empty with confirm and count', async () => {
     const fns = { onRestore: vi.fn(), onPurge: vi.fn(), onEmptyTrash: vi.fn() };
     const c = mount(h(TrashView, { items: [], ...fns }));
     expect(c.textContent).toBe('The Trash is empty.');
@@ -197,17 +208,24 @@ describe('TrashView', () => {
     click(c.querySelectorAll('[data-role=select-row]')[1]!);
     click(q(c, '[data-role=restore]'));
     expect(fns.onRestore).toHaveBeenCalledWith(['s1', 's2']);
+    await act(async () => { await Promise.resolve(); });
+    expect(q(c, '[data-role=restore]')).toBeNull(); // the selection is cleared after the action
+    click(c.querySelectorAll('[data-role=select-row]')[0]!);
+    click(c.querySelectorAll('[data-role=select-row]')[1]!);
     const purge = q(c, '[data-role=purge]')!;
     click(purge);
     expect(fns.onPurge).not.toHaveBeenCalled();
-    expect(purge.textContent).toBe('Delete 2 items permanently?');
-    click(purge);
+    expect(q(c, '[data-role=purge]')!.textContent).toBe('Delete 2 items permanently?');
+    click(q(c, '[data-role=purge]'));
+    expect(fns.onPurge).not.toHaveBeenCalled(); // a double-click does not confirm
+    later();
+    click(q(c, '[data-role=purge]'));
     expect(fns.onPurge).toHaveBeenCalledWith(['s1', 's2']);
-    const empty = q(c, '[data-role=empty]')!;
-    click(empty);
+    click(q(c, '[data-role=empty]'));
     expect(fns.onEmptyTrash).not.toHaveBeenCalled();
-    expect(empty.textContent).toBe('Delete all 2 items permanently?');
-    click(empty);
+    expect(q(c, '[data-role=empty]')!.textContent).toBe('Delete all 2 items permanently?');
+    later();
+    click(q(c, '[data-role=empty]'));
     expect(fns.onEmptyTrash).toHaveBeenCalledTimes(1);
   });
 });

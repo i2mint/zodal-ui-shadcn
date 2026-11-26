@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { usePress, PressIndicator, PRESS_CLASS } from '../press.js';
+import { ConfirmButton, PressButton, useTap } from './confirm-button.js';
 
 const h = React.createElement;
 
@@ -43,10 +43,11 @@ export interface SelectAllCheckboxProps {
 export function SelectAllCheckbox({ selectedShown, shown, onChange, label = 'Select all' }: SelectAllCheckboxProps) {
   const state = headerCheckState(selectedShown, shown);
   const ref = React.useRef<HTMLInputElement>(null);
+  const tap = useTap();
   React.useEffect(() => { if (ref.current) ref.current.indeterminate = state === 'some'; }, [state]);
   return h('input', {
     ref, type: 'checkbox', 'aria-label': label, 'data-role': 'select-all', 'data-state': state,
-    checked: state === 'all', className: 'h-4 w-4 coarse:h-6 coarse:w-6',
+    checked: state === 'all', className: 'h-4 w-4', style: tap ? { width: 24, height: 24 } : undefined,
     onChange: () => onChange(state !== 'all'),
   });
 }
@@ -61,29 +62,47 @@ export interface RowCheckboxProps {
 
 /** A row's checkbox; a shift-click reports `range: true`. */
 export function RowCheckbox({ id, checked, onChange, label = 'Select' }: RowCheckboxProps) {
+  const tap = useTap();
   return h('input', {
-    type: 'checkbox', 'aria-label': label, 'data-role': 'select-row', checked, className: 'h-4 w-4 coarse:h-6 coarse:w-6',
+    type: 'checkbox', 'aria-label': label, 'data-role': 'select-row', checked, className: 'h-4 w-4', style: tap ? { width: 24, height: 24 } : undefined,
     onChange: () => undefined, // controlled: the click handler decides, since it knows shiftKey
     onClick: (e: React.MouseEvent) => onChange(id, !checked, { range: e.shiftKey }),
   });
 }
 
-/** Long-press on touch (`pointerType` touch) enters select mode; spread the props on a row. */
+/** How far (px) a finger may drift before a long press is taken for a scroll or drag. */
+export const LONG_PRESS_SLOP_PX = 10;
+
+/**
+ * Long-press on touch (`pointerType` touch) enters select mode; spread the props on a row. The
+ * click that follows a fired long press is swallowed (`onClickCapture`), so the row does not
+ * also open. A drift past {@link LONG_PRESS_SLOP_PX} cancels (a scroll), finger jitter does not.
+ */
 export function useLongPress(onLongPress: () => void, ms: number = LONG_PRESS_MS) {
   const timer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const origin = React.useRef<{ x: number; y: number } | null>(null);
+  const fired = React.useRef(false);
   const latest = React.useRef(onLongPress);
   latest.current = onLongPress;
-  const clear = () => { if (timer.current !== undefined) { clearTimeout(timer.current); timer.current = undefined; } };
+  const clear = () => { if (timer.current !== undefined) { clearTimeout(timer.current); timer.current = undefined; } origin.current = null; };
   React.useEffect(() => clear, []);
   return {
     onPointerDown: (e: React.PointerEvent) => {
       if (e.pointerType !== 'touch') return;
       clear();
-      timer.current = setTimeout(() => { timer.current = undefined; latest.current(); }, ms);
+      fired.current = false;
+      origin.current = { x: e.clientX ?? 0, y: e.clientY ?? 0 };
+      timer.current = setTimeout(() => { timer.current = undefined; fired.current = true; latest.current(); }, ms);
     },
     onPointerUp: clear,
     onPointerCancel: clear,
-    onPointerMove: clear, // a scroll or drag is not a long press
+    onPointerMove: (e: React.PointerEvent) => {
+      const o = origin.current;
+      if (o && Math.hypot((e.clientX ?? 0) - o.x, (e.clientY ?? 0) - o.y) > LONG_PRESS_SLOP_PX) clear();
+    },
+    onClickCapture: (e: React.MouseEvent) => {
+      if (fired.current) { fired.current = false; e.stopPropagation(); e.preventDefault(); }
+    },
   };
 }
 
@@ -113,8 +132,7 @@ export function selectionBannerText(p: Pick<SelectionBannerProps, 'selectedShown
 }
 
 function BannerButton({ label, run, role }: { label: string; run: () => unknown; role: string }) {
-  const { props, state } = usePress(run);
-  return h('button', { ...props, type: 'button', 'data-role': role, className: `${PRESS_CLASS} min-h-9 coarse:min-h-11 rounded px-2 text-sm underline` }, label, h(PressIndicator, { show: state.indicator }));
+  return h(PressButton, { label, run, role, className: 'border-0 underline' });
 }
 
 /**
@@ -165,28 +183,16 @@ export function refusalText(a: BulkAction, count: number): string | null {
 }
 
 function BulkButton({ action, count, onAction, noun }: { action: BulkAction; count: number; onAction: ActionBarProps['onAction']; noun: { one: string; many: string } }) {
-  const [asking, setAsking] = React.useState(false);
   const eligible = action.eligible ?? count;
-  const run = () => {
-    if (action.confirm && !asking) { setAsking(true); return undefined; }
-    setAsking(false);
-    return onAction(action);
-  };
-  const { props, state } = usePress(run);
   const refusal = refusalText(action, count);
-  const disabled = eligible === 0;
-  const destructive = action.variant === 'destructive';
+  const refusalId = `refusal-${action.name}`;
   return h('span', { className: 'inline-flex flex-col', 'data-action': action.name },
-    h('span', { className: 'inline-flex items-center gap-1' },
-      h('button', {
-        ...props, type: 'button', 'data-role': 'action',
-        // Not native `disabled`: stays focusable and keeps its refusal text readable.
-        'aria-disabled': disabled || props['aria-disabled'] ? true : undefined,
-        onClick: disabled ? (e: React.MouseEvent) => e.preventDefault() : props.onClick,
-        className: `${PRESS_CLASS} min-h-9 coarse:min-h-11 rounded border px-3 text-sm ${destructive ? 'text-destructive' : ''} ${disabled ? 'opacity-50' : 'hover:bg-muted'}`,
-      }, asking ? `${action.label} ${eligible} ${eligible === 1 ? noun.one : noun.many}?` : action.label, h(PressIndicator, { show: state.indicator })),
-      asking ? h('button', { type: 'button', 'data-role': 'cancel', className: 'min-h-9 coarse:min-h-11 rounded px-2 text-sm underline', onClick: () => setAsking(false) }, 'Cancel') : null),
-    refusal ? h('span', { 'data-role': 'refusal', className: 'text-xs text-muted-foreground' }, refusal) : null);
+    h(ConfirmButton, {
+      label: action.label, role: 'action', run: () => onAction(action), disabled: eligible === 0,
+      confirmText: action.confirm ? `${action.label} ${eligible} ${eligible === 1 ? noun.one : noun.many}?` : undefined,
+      className: action.variant === 'destructive' ? 'text-destructive' : '', describedBy: refusal ? refusalId : undefined,
+    }),
+    refusal ? h('span', { id: refusalId, 'data-role': 'refusal', className: 'text-xs text-muted-foreground' }, refusal) : null);
 }
 
 /** The bar that appears while something is selected: the count and the bulk actions. */
