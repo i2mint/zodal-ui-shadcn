@@ -93,6 +93,24 @@ const { collapsedGroups, expandedGroups } = viewState;   // from createViewState
 
 The `ViewConfig` type is declared here structurally (`src/view-types.ts`) and `groupItems` is a local copy, because the `@zodal/ui` on npm this package builds against predates `toViewConfig`; any object of that shape works.
 
+## Views, selection, bulk actions and the Trash
+
+Presentational components for the views / selection / trash model (types in `@zodal/core`, `withTrash` in `@zodal/store`); they take plain props and handlers, and every press has the feedback behaviour above.
+
+```tsx
+import { ViewSwitcher, SelectionBanner, ActionBar, TrashView } from '@zodal/ui-shadcn';
+
+<ViewSwitcher views={views} activeId={active} modified={dirty} onSelect={setView} onSaveAs={saveAs} onRevert={revert} />
+<SelectionBanner selectedShown={20} shown={20} totalMatching={340} onSelectAllMatching={all} onClear={clear} />
+<ActionBar count={12} actions={[{ name: 'add', label: 'Add', past: 'added', eligible: 9, refusedReason: 'no file' }]} onAction={run} />
+<TrashView items={trashed} retentionDays={30} onRestore={restore} onPurge={purge} onEmptyTrash={empty} />
+```
+
+- **ViewSwitcher** picks chips (up to 5 views), a menu with pinned views first (6 to 15) or a list (more, or nested views); override with `presentation`. The Modified badge appears with Save (saved views only), Save as and Revert.
+- **Selection**: `SelectAllCheckbox` (indeterminate), `RowCheckbox` (a shift-click reports `range: true`; `shiftRangeIds` gives the ids), `useLongPress` for select mode on touch, and `SelectionBanner` ("All 340 matching selected").
+- **ActionBar** shows the count and the bulk actions; refusals show before the click ("3 of 12 can't be added: no file"); `confirm: true` asks with the count, for actions an Undo cannot take back.
+- **TrashView**: Restore (no confirmation), Delete permanently and Empty Trash (both confirm, with the count), the retention note and days left per item.
+
 ## Slider with a ghost thumb
 
 A number field declared with `editWidget: 'slider'` renders as `GhostSlider`: a range input that, while the person drags, leaves a ghost thumb at the saved value (the value at pointer-down, or `savedValue`) so they can see how far they moved; it disappears on release. The pointer is handled by the slider itself, not by the browser, so on a phone the thumb stays under the finger and lands where the finger is lifted: a press on the thumb grabs it without a jump, a tap on the track moves the thumb there, a touch only drags once it has moved a few pixels sideways (a vertical swipe still scrolls the page), and the touch area is 44px tall. The ghost is a light ring with a dark outline, visible on the filled and the empty part of the track (`--zodal-slider-ghost-ring`, `--zodal-slider-ghost-outline`, `--zodal-slider-ghost-fill` restyle it). A readout shows the live value; the form value is written on commit (release, or each key press), not on every move.
