@@ -64,7 +64,7 @@ export function relativeTime(at: number, now: number = Date.now()): string {
 }
 
 /** Is the pointer coarse (a finger)? Tracks changes; false where `matchMedia` is unavailable. */
-function useCoarsePointer(): boolean {
+export function useCoarsePointer(): boolean {
   const query = () => (typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(COARSE_POINTER) : null);
   const [coarse, setCoarse] = React.useState(() => query()?.matches ?? false);
   React.useEffect(() => {
@@ -78,7 +78,7 @@ function useCoarsePointer(): boolean {
 }
 
 /** The inline size that makes a control a `min` px target under a coarse pointer (nothing otherwise). */
-function touchTarget(coarse: boolean, min: number): React.CSSProperties | undefined {
+export function touchTarget(coarse: boolean, min: number): React.CSSProperties | undefined {
   return coarse ? { minWidth: min, minHeight: min } : undefined;
 }
 
